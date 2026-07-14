@@ -1,115 +1,122 @@
 # CCCX Usage Monitor
 
-Claude Code と OpenAI Codex CLI の**利用制限の消費率**を Mac のメニューバーに常時表示し、
-利用履歴をアプリ内ダッシュボードでグラフとして見られる macOS アプリです。
+**Claude Code と OpenAI Codex CLI の利用制限を、Mac のメニューバーで常時監視。**
 
 > **CCCX** = **CC**(Claude Code)+ **CX**(Codex)
 
-```
-メニューバー(バー表示):   ▂▂▂▂▂▂▂░░░   ← 上段: Claude 5時間セッション(オレンジ枠)
-                          ▂▂▂░░░░░░░   ← 下段: Codex(白枠)
-メニューバー(テキスト):   ● 74%  ○ 32%  (オレンジ● = Claude、白○ = Codex)
-```
+5時間セッション・週次などの制限ウィンドウの消費率を60秒ごとに取得してメニューバーに表示し、
+推移グラフ・リセット予定時刻・利用傾向の分析をアプリ内ダッシュボードで確認できます。
 
-どちらの数値も **Anthropic / OpenAI のサーバーが返すアカウント全体の値**なので、
-複数マシンで使っていても正確です(ローカルログの推測値ではありません)。
+表示する数値はすべて **Anthropic / OpenAI のサーバーが返すアカウント全体の値**です。
+複数マシンで使っていても正確で、ローカルログからの推測ではありません。
 
-## 機能
+![ダッシュボード 制限消費率](docs/images/dashboard-limits.png)
 
-- **メニューバー表示** — ミニバー2段 or 色付きドット+% のテキスト表示(切替可)。色は 緑 <60% / 黄 <85% / 赤 ≥85%、取得エラー時はオレンジ+⚠
-- **ポップオーバー** — 全制限ウィンドウのゲージ、リセット予定時刻(絶対時刻+残り時間)、プラン表示(例: `Claude plan: max 5x ・ Codex plan: plus`)、各種設定
-- **ダッシュボード**
-  - **制限消費率**: 5時間セッション枠を点線の箱+面グラフで表示(Usage for Claude 風)。ホバーで「開始→終了・ピーク%・上限到達までの時間」。週次などの他ウィンドウは折れ線で重ね描き。Claude/Codex 切替、期間 12h〜90d、CSV 書き出し、グラフ下にリセット予定時刻
-  - **インサイト**: セッション上限到達回数(平均到達時間)・平均週次使用率・高負荷(90%+)日数を Claude / Codex の2段組で
-- **フローティングHUD** — 常に最前面の半透明パネル(全Space・フルスクリーン上でも表示、ドラッグで移動、位置記憶)
-- **自動判定** — Claude Code 未ログイン / codex 未インストールの環境では、そのサービスの表示を自動で隠します(エラーにしない)。後からセットアップすれば再起動なしで現れます
-- **1分同期** — 両サービスとも60秒ごとに更新(間隔は 1/2/5分 で変更可)。429 時は `Retry-After` を尊重して指数バックオフ
+## 特徴
+
+### メニューバー
+
+- **ミニバー2段**(上段: Claude=オレンジ枠 / 下段: Codex=白枠、色で危険度: 緑 <60% / 黄 <85% / 赤 ≥85%)
+- または**色付きドット+数値**(`● 74%  ○ 32%`)のテキスト表示
+- クリックでポップオーバー: 全ウィンドウのゲージ、**リセット予定時刻(絶対時刻+残り時間)**、プラン表示(`Claude plan: max 5x ・ Codex plan: plus`)、各種設定
+- メニューバー自体を**非表示**にしてHUDだけで運用することも可能
+
+<p>
+  <img src="docs/images/menubar-bars.png" height="44" alt="メニューバー バー表示">
+  <img src="docs/images/menubar-text.png" height="44" alt="メニューバー テキスト表示">
+</p>
+<img src="docs/images/popover.png" width="360" alt="ポップオーバー">
+
+### フローティングHUD
+
+- 常に最前面の半透明パネル。**全Space・フルスクリーンアプリの上でも表示**、ドラッグで自由に配置(位置記憶)
+- 下部ボタン: ダッシュボードを開く / メニューバー表示切替 / 閉じる
+- シェブロン(⌄)で展開すると**全ウィンドウの%とリセット日時**を一覧表示
+
+<img src="docs/images/hud.png" width="300" alt="フローティングHUD(展開)">
+
+### ダッシュボード
+
+- **制限消費率**: 5時間セッション枠を点線の箱+面グラフで可視化。ホバーで「開始→終了・ピーク%・上限到達までの時間」。週次などは折れ線で重ね描き。Claude/Codex 切替、期間 12h〜90d、CSV 書き出し
+- **インサイト**: セッション上限到達回数(平均到達時間)・平均週次使用率・高負荷(90%+)日数を Claude / Codex 別に自動集計
+
+![ダッシュボード インサイト](docs/images/dashboard-insights.png)
+
+*(スクリーンショットのグラフはデモデータです)*
+
+### 表示の正確性へのこだわり
+
+- **60秒ごとの同期**(間隔は 1/2/5分 で変更可)。429 時はサーバーの `Retry-After` を尊重して自動バックオフ
+- **期限切れ補正**: ウィンドウのリセット時刻を過ぎたら、取得済みの古い%をそのまま出さず 0% として表示(「リセット済み — 次の取得で更新」と明示)
+- リセット時刻は常にサーバー返却値をそのまま表示 — 障害後の臨時リセットや不規則な週次リセットにも1分以内に追従
+- 取得失敗時は最後の正常値+⚠で明示(データが10分以内なら⚠は出さない)
+- Claude Code 未ログイン / Codex 未インストールの環境では、そのサービスを自動で非表示(エラー扱いしない)。**片方だけの利用でもOK**
 
 ## 必要環境
 
 - macOS 14 (Sonoma) 以降、Apple Silicon
-- Xcode Command Line Tools(Swift 6 系。`xcode-select --install` で導入)
-- 監視対象(**どちらか片方だけでも動きます**):
-  - [Claude Code](https://claude.com/claude-code) にログイン済み(サブスクリプション認証)
-  - [Codex CLI](https://developers.openai.com/codex/cli) にログイン済み(ChatGPT 認証)
+- Xcode Command Line Tools(Swift 6 系。`xcode-select --install`)
+- Claude Code(サブスクでログイン済み)/ Codex CLI(ChatGPT でログイン済み)— どちらか片方だけでも可
 
-## ビルドとインストール
+## インストール
 
 ```bash
 git clone https://github.com/Rtm2301/CCCX-Usage-Monitor.git
 cd CCCX-Usage-Monitor
-Scripts/build-app.sh --install   # ビルドして /Applications にインストール
+Scripts/build-app.sh --install
 open "/Applications/CCCX Usage Monitor.app"
 ```
 
-- `--install` なしなら `dist/CCCX Usage Monitor.app` に出力されます
-- SPM ではなく swiftc 直接コンパイルです(外部依存ゼロ。`swift build` は不要)
-- ログイン時に自動起動するには: システム設定 → 一般 → ログイン項目 に `CCCX Usage Monitor.app` を追加
-- 内部名(実行バイナリ・データフォルダ)は歴史的経緯で `UsageBar` のままです(`~/Library/Application Support/UsageBar/`)
-
-### 初回起動時の許可
-
-Claude Code の OAuth トークンを読むため、初回に **Keychain のアクセス許可ダイアログ**が1回出ます。
-「**常に許可**」を選んでください(Apple 署名済みの `/usr/bin/security` 経由なので、アプリを再ビルドしても許可は持続します)。
+- 外部依存ゼロ・swiftc 直接コンパイルなので数十秒でビルドできます(`--install` なしなら `dist/` に出力)
+- **初回起動時に Keychain の許可ダイアログが1回出ます → 「常に許可」を選択**(Apple 署名済みの `/usr/bin/security` 経由なので再ビルド後も許可が持続します)
+- ログイン時に自動起動: システム設定 → 一般 → ログイン項目 に `CCCX Usage Monitor.app` を追加
 
 ## 仕組み(データソース)
 
 | データ | 取得方法 | 精度 |
 |---|---|---|
-| Claude 制限%(セッション/週次/モデル別) | Keychain のサービス `Claude Code-credentials` から OAuth トークンを読み、`GET https://api.anthropic.com/api/oauth/usage`(ヘッダ `anthropic-beta: oauth-2025-04-20`)。レスポンスの `limits[]` 配列をデコード | **アカウント全体・ライブ** |
+| Claude 制限%(セッション/週次/モデル別) | Keychain の `Claude Code-credentials` から OAuth トークンを読み、`GET https://api.anthropic.com/api/oauth/usage`(ヘッダ `anthropic-beta: oauth-2025-04-20`)の `limits[]` をデコード | アカウント全体・ライブ |
 | Claude プラン | 同 Keychain の `subscriptionType` + `rateLimitTier` | — |
-| Codex 制限% | `codex app-server` を子プロセスとして常駐させ、JSON-RPC `account/rateLimits/read` を毎分呼ぶ。app-server 不可時は `~/.codex/sessions/**/rollout-*.jsonl` の最終値にフォールバック(黄バナーで明示) | **アカウント全体・ライブ** |
-| 制限%の推移グラフ | 上記を毎分記録した自前の蓄積(`snapshots/YYYY-MM.jsonl`、90日保持)。API は現在値しか返さないため、**履歴はアプリ稼働中のみ**蓄積されます | アカウント全体 |
+| Codex 制限% | `codex app-server` を子プロセス常駐させ JSON-RPC `account/rateLimits/read` を毎分実行。不可時は `~/.codex/sessions/**/rollout-*.jsonl` の最終値にフォールバック(黄バナー表示) | アカウント全体・ライブ |
+| 推移グラフ | 上記を毎分記録した自前の蓄積(`~/Library/Application Support/UsageBar/snapshots/`、90日保持)。**履歴はアプリ稼働中のみ**蓄積 | アカウント全体 |
 
 トークン数や金額ベースの表示は意図的にありません。API は使用率%しか返さず、トークン/コストを
-アカウント全体で正確に出す方法が存在しないためです(ローカルログ集計だと「このMacの分だけ」になり誤解を招く)。
+アカウント全体で正確に出す方法が存在しないためです(ローカルログ集計だと「そのMacの分だけ」になり誤解を招く)。
 
-- リセット時刻は常にサーバー返却の `resets_at` をそのまま表示します(自前で予測しないため、障害後の臨時リセットや72時間週次リセットなどの不規則な変更にも1分以内に追従します)
-- `api/oauth/usage` は**非公開エンドポイント**です。Anthropic 側の変更で動かなくなる可能性があり、その場合は最後の正常値+⚠表示に退避します
-
-## データとカスタマイズ
-
-すべて `~/Library/Application Support/UsageBar/` 以下:
-
-| ファイル | 内容 |
-|---|---|
-| `snapshots/YYYY-MM.jsonl` | 制限%の1分ごとの記録(値が変わった時のみ追記、3ヶ月で自動削除) |
-
-テスト・デバッグ用の環境変数:
-`USAGEBAR_KEYCHAIN_SERVICE`(Keychainサービス名の差し替え) / `USAGEBAR_CODEX_DIR` / `USAGEBAR_CODEX_BIN` / `USAGEBAR_DATA_DIR` / `USAGEBAR_FAKE_401=1`(トークン期限切れの再現)
+`api/oauth/usage` は**非公開エンドポイント**のため、Anthropic 側の変更で動かなくなる可能性があります。
+その場合も最後の正常値+⚠表示に退避し、クラッシュはしません。
 
 ## トラブルシューティング
 
 | 症状 | 対処 |
 |---|---|
-| `● —⚠` が出続ける | Claude Code に一度ログインし直す(トークンは Claude Code 自身が更新します)。ポップオーバーのバナーに理由が出ます |
-| Codex が黄バナー(フォールバック) | GUI アプリの PATH に codex が無いケースは対応済み(`/opt/homebrew/bin` 等を自動探索)。それでも出る場合は `USAGEBAR_CODEX_BIN=/path/to/codex` を指定 |
-| 429(レート制限)が頻発 | 他の使用量監視アプリ(Usage for Claude 等)との併用で合算頻度が上がっています。どちらかを止めるか、ポップオーバーで更新間隔を2〜5分に |
-| ビルドで SDK 不整合エラー | Command Line Tools が壊れています: `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install` |
-| アプリのアイコンが変わらない | `killall Finder` または再ログイン(アイコンキャッシュ) |
+| `● —⚠` が出続ける | Claude Code を一度開く(トークンは Claude Code 自身が更新)。理由はポップオーバーのバナーに表示されます |
+| Codex が黄バナー(フォールバック) | `USAGEBAR_CODEX_BIN=/path/to/codex` で codex の場所を明示(Homebrew 標準パスは自動探索済み) |
+| 429(レート制限)が頻発 | 他の使用量監視アプリとの併用が原因。どちらかを止めるか、更新間隔を2〜5分に |
+| ビルドで SDK 不整合エラー | CLT が壊れています: `sudo rm -rf /Library/Developer/CommandLineTools && xcode-select --install` |
+| メニューバーもHUDも消えた | 起きません(相互ガードあり)。万一の場合も再起動でメニューバーが復活します |
 
 ## プロジェクト構成
 
 ```
-Package.swift                     # (参考) SPM定義 — ビルドは Scripts/build-app.sh が正
-Support/Info.plist                # LSUIElement=true(Dockに出ない常駐アプリ)
-Support/UsageBar.icns             # アプリアイコン(make-icon.sh で生成)
 Scripts/build-app.sh              # swiftc → .app 組み立て → ad-hoc 署名 → (--install)
-Scripts/make-icon.sh              # PNG → .icns
+Support/Info.plist                # LSUIElement=true(常駐アプリ)
 Sources/UsageBar/
-  UsageBarApp.swift               # @main: MenuBarExtra + Dashboard Window
-  AppState.swift                  # 中枢: ポーリング、状態、履歴、未設定判定
-  Models/                         # LimitSnapshot(seriesKey方式) / HourBucket / 価格
+  UsageBarApp.swift               # @main: MenuBarExtra(表示/非表示対応)
+  AppState.swift                  # ポーリング・状態・履歴・未設定判定・締め出しガード
+  Models/LimitModels.swift        # LimitSnapshot(期限切れ補正 effectivePercent)
   Services/
     ClaudeAuth.swift              # Keychain → トークン+プラン
-    ClaudeLimitsClient.swift      # oauth/usage(429バックオフ、防御的デコード)
+    ClaudeLimitsClient.swift      # oauth/usage(Retry-After 対応・防御的デコード)
     CodexAppServerClient.swift    # codex app-server 常駐 JSON-RPC クライアント
-    CodexLimitsReader.swift       # rollout ファイルのフォールバック読み取り
+    CodexLimitsReader.swift       # rollout ファイルのフォールバック
     SnapshotStore.swift           # 制限スナップショットの JSONL 永続化
-  Views/                          # ポップオーバー / メニューバー描画 / HUD / 各チャート
+  Views/                          # ポップオーバー / メニューバー描画 / HUD / ダッシュボード
 ```
+
+内部名(実行バイナリ・データフォルダ)は歴史的経緯で `UsageBar` です。
 
 ## 制限事項
 
 - 制限%の**推移**はアプリが動いている間しか記録されません(APIが現在値のみ返すため)
-- ad-hoc 署名なので配布には向きません(各自がローカルでビルドする前提)。Gatekeeper 警告を避けたい場合は自分の Developer ID で `codesign` してください
+- ad-hoc 署名なので配布物はありません(各自がローカルでビルドする前提)。Gatekeeper 警告を避けたい場合は自分の Developer ID で `codesign` してください
