@@ -87,7 +87,7 @@ struct ActivityGridView: View {
                 gridSection(title: "Codex", service: "codex", unit: "週次枠",
                             stats: codexStats, base: .primary)
 
-                Text("色の濃さ = その日に消費した枠の量(%pt換算・全マシン合算)。記録はアプリ稼働中のみ蓄積。")
+                Text("色の濃さ = その日に消費した枠の量(%pt換算・全マシン合算)。記録はアプリ稼働中のみ蓄積")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

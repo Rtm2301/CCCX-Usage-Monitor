@@ -85,7 +85,7 @@ struct PopoverView: View {
     @ViewBuilder
     private var statusBanners: some View {
         if !state.claudeConfigured && !state.codexConfigured {
-            BannerView(text: "Claude Code / Codex が見つかりません。ログインまたはインストールすると自動で表示されます。", color: .gray)
+            BannerView(text: "Claude Code / Codex が見つかりません。ログインまたはインストールすると自動で表示されます", color: .gray)
         }
 
         if state.claudeConfigured {
