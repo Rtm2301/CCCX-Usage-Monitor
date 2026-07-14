@@ -107,7 +107,7 @@ struct FloatingHUDView: View {
                                 .fontWeight(.semibold)
                         }
                         if l.isExpired {
-                            Text("リセット済み — 次の取得で更新")
+                            Text("リセット済み — 次の取得で更新。")
                                 .font(.system(size: 9))
                                 .foregroundStyle(.tertiary)
                         } else if let resets = l.resetsAt {

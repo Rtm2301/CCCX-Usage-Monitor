@@ -81,7 +81,7 @@ struct InsightsView: View {
                 ContentUnavailableView(
                     "まだ履歴がありません",
                     systemImage: "lightbulb",
-                    description: Text("アプリ稼働中に記録が蓄積されると自動で分析されます"))
+                    description: Text("アプリ稼働中に記録が蓄積されると自動で分析されます。"))
             } else {
                 let claude = compute(service: "claude")
                 let codex = compute(service: "codex")
@@ -96,7 +96,7 @@ struct InsightsView: View {
                 }
 
                 if let since = state.limitHistory.map(\.ts).min() {
-                    Text("計測期間: \(since.formatted(date: .abbreviated, time: .shortened)) 〜 現在(アプリ稼働中のみ記録・アカウント全体の値)")
+                    Text("計測期間: \(since.formatted(date: .abbreviated, time: .shortened)) 〜 現在(アプリ稼働中のみ記録・アカウント全体の値)。")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -126,8 +126,8 @@ struct InsightsView: View {
                         icon: "bolt.fill", tint: .red,
                         title: ins.hitsAreSession ? "セッション上限到達" : "週次上限到達",
                         value: "\(ins.hits)回",
-                        detail: ins.avgTimeToLimit.map { "平均 \(formatDuration($0)) で到達" }
-                            ?? (ins.hits == 0 ? "上限到達なし" : ""))
+                        detail: ins.avgTimeToLimit.map { "平均 \(formatDuration($0)) で到達。" }
+                            ?? (ins.hits == 0 ? "上限到達なし。" : ""))
                     InsightCard(
                         icon: "calendar", tint: .blue,
                         title: "平均週次使用率",
@@ -137,7 +137,7 @@ struct InsightsView: View {
                         icon: "exclamationmark.triangle", tint: .orange,
                         title: "高負荷(90%+)",
                         value: "\(ins.highUsageDays)日",
-                        detail: "いずれかの枠が90%を超えた日数")
+                        detail: "いずれかの枠が90%を超えた日数。")
                 }
             }
         }
@@ -152,9 +152,9 @@ struct InsightsView: View {
     private func weeklyComment(_ avgWeekly: Double?) -> String {
         guard let w = avgWeekly else { return "" }
         switch w {
-        case ..<40: return "余裕あり — 週次枠を十分使い切れていません"
-        case ..<75: return "ほどよい使用量です"
-        default: return "週次枠を使い切りがち — プラン上限に注意"
+        case ..<40: return "余裕あり — 週次枠を十分使い切れていません。"
+        case ..<75: return "ほどよい使用量です。"
+        default: return "週次枠を使い切りがち — プラン上限に注意。"
         }
     }
 }

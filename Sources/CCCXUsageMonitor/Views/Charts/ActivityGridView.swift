@@ -80,14 +80,14 @@ struct ActivityGridView: View {
                 ContentUnavailableView(
                     "まだ記録がありません",
                     systemImage: "square.grid.3x3",
-                    description: Text("アプリ稼働中に日ごとの消費量が蓄積されていきます"))
+                    description: Text("アプリ稼働中に日ごとの消費量が蓄積されていきます。"))
             } else {
                 gridSection(title: "Claude", service: "claude", unit: "セッション枠",
                             stats: claudeStats, base: .orange)
                 gridSection(title: "Codex", service: "codex", unit: "週次枠",
                             stats: codexStats, base: .primary)
 
-                Text("色の濃さ = その日に消費した枠の量(%pt換算・全マシン合算)。記録はアプリ稼働中のみ蓄積")
+                Text("色の濃さ = その日に消費した枠の量(%pt換算・全マシン合算)。記録はアプリ稼働中のみ蓄積。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             }

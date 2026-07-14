@@ -85,7 +85,7 @@ struct PopoverView: View {
     @ViewBuilder
     private var statusBanners: some View {
         if !state.claudeConfigured && !state.codexConfigured {
-            BannerView(text: "Claude Code / Codex が見つかりません。ログインまたはインストールすると自動で表示されます", color: .gray)
+            BannerView(text: "Claude Code / Codex が見つかりません。ログインまたはインストールすると自動で表示されます。", color: .gray)
         }
 
         if state.claudeConfigured {
@@ -156,7 +156,7 @@ struct LimitGaugeRow: View {
             ProgressView(value: min(limit.effectivePercent, 100), total: 100)
                 .tint(barColor)
             if limit.isExpired {
-                Text("リセット済み — 次の取得で更新されます")
+                Text("リセット済み — 次の取得で更新されます。")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
             } else if let resets = limit.resetsAt {
