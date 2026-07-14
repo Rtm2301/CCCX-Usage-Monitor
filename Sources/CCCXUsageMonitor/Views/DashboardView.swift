@@ -49,10 +49,15 @@ struct DashboardView: View {
         TabView {
             LimitHistoryChart()
                 .tabItem { Label("制限消費率", systemImage: "gauge.with.needle") }
-            ActivityGridView()
-                .tabItem { Label("アクティビティ", systemImage: "square.grid.3x3.fill") }
-            InsightsView()
-                .tabItem { Label("インサイト", systemImage: "lightbulb") }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 4) {
+                    ActivityGridView()
+                    Divider()
+                        .padding(.horizontal)
+                    InsightsView()
+                }
+            }
+            .tabItem { Label("アクティビティ", systemImage: "square.grid.3x3.fill") }
         }
         .padding()
     }
