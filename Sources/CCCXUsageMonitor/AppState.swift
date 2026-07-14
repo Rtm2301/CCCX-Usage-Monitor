@@ -131,9 +131,10 @@ final class AppState {
 
     private func backoffClaude(retryAfter: TimeInterval?) {
         if let retryAfter {
-            // Server told us exactly when to come back; add a little jitter so
-            // we don't sync up with other pollers (e.g. Usage for Claude).
-            claudeBackoffSeconds = retryAfter + Double.random(in: 2...10)
+            // Respect the server's Retry-After (+ jitter to avoid syncing up
+            // with other pollers), but never stall for more than 10 minutes —
+            // a huge header value once froze Claude updates for hours.
+            claudeBackoffSeconds = min(max(retryAfter, 60), 600) + Double.random(in: 2...10)
         } else {
             claudeBackoffSeconds = min(claudeBackoffSeconds * 2, 300)
         }
