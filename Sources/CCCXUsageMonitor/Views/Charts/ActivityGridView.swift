@@ -94,6 +94,7 @@ struct ActivityGridView: View {
                     ForEach(Service.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 170)
                 Spacer()
             }

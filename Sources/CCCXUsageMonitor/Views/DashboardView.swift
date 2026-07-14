@@ -27,6 +27,21 @@ enum ChartPalette {
     }
 }
 
+/// Identity dot matching the menu bar / HUD: orange = Claude,
+/// white with black edge = Codex.
+struct ServiceDot: View {
+    let service: String   // "claude" | "codex"
+
+    var body: some View {
+        Circle()
+            .fill(service == "claude" ? Color.orange : Color.white)
+            .overlay(Circle().strokeBorder(
+                service == "claude" ? Color.white.opacity(0.8) : Color.black.opacity(0.55),
+                lineWidth: 0.8))
+            .frame(width: 9, height: 9)
+    }
+}
+
 struct DashboardView: View {
     @Environment(AppState.self) private var state
 

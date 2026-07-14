@@ -107,6 +107,7 @@ struct LimitHistoryChart: View {
                     ForEach(Service.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 170)
                 Spacer()
                 Button {
@@ -119,6 +120,7 @@ struct LimitHistoryChart: View {
                     ForEach(HistoryRange.allCases) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .labelsHidden()
                 .frame(width: 280)
             }
 

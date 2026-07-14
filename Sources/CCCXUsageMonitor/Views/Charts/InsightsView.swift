@@ -86,13 +86,13 @@ struct InsightsView: View {
                 let claude = compute(service: "claude")
                 let codex = compute(service: "codex")
                 if state.claudeConfigured || claude.hasData {
-                    section(title: "Claude", tint: .orange, ins: claude)
+                    section(title: "Claude", service: "claude", ins: claude)
                 }
                 if (state.claudeConfigured || claude.hasData) && (state.codexConfigured || codex.hasData) {
                     Divider()
                 }
                 if state.codexConfigured || codex.hasData {
-                    section(title: "Codex", tint: .primary, ins: codex)
+                    section(title: "Codex", service: "codex", ins: codex)
                 }
 
                 if let since = state.limitHistory.map(\.ts).min() {
@@ -107,11 +107,13 @@ struct InsightsView: View {
     }
 
     @ViewBuilder
-    private func section(title: String, tint: Color, ins: ServiceInsights) -> some View {
+    private func section(title: String, service: String, ins: ServiceInsights) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label(title, systemImage: "circle.fill")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(tint)
+            HStack(spacing: 6) {
+                ServiceDot(service: service)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+            }
 
             if !ins.hasData {
                 Text("データがありません")
