@@ -57,6 +57,8 @@
 - macOS 14 (Sonoma) 以降、Apple Silicon
 - Xcode Command Line Tools(Swift 6 系。`xcode-select --install`)
 - Claude Code(サブスクでログイン済み)/ Codex CLI(ChatGPT でログイン済み)— どちらか片方だけでも可
+  - Claude 側の認証は **Claude Code のログイン情報**(CLI または VS Code 等の拡張)を使います。claude.ai やデスクトップアプリだけの利用では認証情報が無いため、一度 `claude` にログインしてください
+  - 表示される使用率%は Claude Code 限定ではなく、**claude.ai のチャットやモバイルも含むアカウント全体の消費率**です(制限はClaude全体で共有のため)
 
 ## インストール
 
