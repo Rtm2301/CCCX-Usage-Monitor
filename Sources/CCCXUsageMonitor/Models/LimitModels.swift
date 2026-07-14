@@ -16,6 +16,16 @@ struct LimitSnapshot: Codable, Hashable {
 extension LimitSnapshot {
     var service: String { seriesKey.hasPrefix("claude") ? "claude" : "codex" }
 
+    /// The window has reset since this value was fetched — the recorded
+    /// percent no longer reflects reality (a fresh window starts at 0).
+    var isExpired: Bool {
+        guard let resetsAt else { return false }
+        return resetsAt.addingTimeInterval(30) < Date()
+    }
+
+    /// Percent to display right now: expired windows show 0, not the stale value.
+    var effectivePercent: Double { isExpired ? 0 : usedPercent }
+
     var displayName: String {
         switch seriesKey {
         case "claude:session": return "Claude セッション (5h)"

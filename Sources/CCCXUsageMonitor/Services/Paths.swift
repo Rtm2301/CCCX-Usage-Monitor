@@ -15,17 +15,23 @@ enum Paths {
         ProcessInfo.processInfo.environment["USAGEBAR_KEYCHAIN_SERVICE"] ?? "Claude Code-credentials"
     }
 
-    static var dataDir: URL {
-        let base: URL
+    static let dataDir: URL = {
+        let fm = FileManager.default
         if let p = ProcessInfo.processInfo.environment["USAGEBAR_DATA_DIR"] {
-            base = URL(fileURLWithPath: (p as NSString).expandingTildeInPath)
-        } else {
-            base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                .appendingPathComponent("UsageBar")
+            let base = URL(fileURLWithPath: (p as NSString).expandingTildeInPath)
+            try? fm.createDirectory(at: base, withIntermediateDirectories: true)
+            return base
         }
-        try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
+        let appSupport = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = appSupport.appendingPathComponent("CCCX Usage Monitor")
+        // One-time migration from the app's former name.
+        let legacy = appSupport.appendingPathComponent("UsageBar")
+        if !fm.fileExists(atPath: base.path), fm.fileExists(atPath: legacy.path) {
+            try? fm.moveItem(at: legacy, to: base)
+        }
+        try? fm.createDirectory(at: base, withIntermediateDirectories: true)
         return base
-    }
+    }()
 
     static var snapshotsDir: URL {
         let d = dataDir.appendingPathComponent("snapshots")

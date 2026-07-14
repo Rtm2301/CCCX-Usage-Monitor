@@ -80,7 +80,7 @@ open "/Applications/CCCX Usage Monitor.app"
 | Claude 制限%(セッション/週次/モデル別) | Keychain の `Claude Code-credentials` から OAuth トークンを読み、`GET https://api.anthropic.com/api/oauth/usage`(ヘッダ `anthropic-beta: oauth-2025-04-20`)の `limits[]` をデコード | アカウント全体・ライブ |
 | Claude プラン | 同 Keychain の `subscriptionType` + `rateLimitTier` | — |
 | Codex 制限% | `codex app-server` を子プロセス常駐させ JSON-RPC `account/rateLimits/read` を毎分実行。不可時は `~/.codex/sessions/**/rollout-*.jsonl` の最終値にフォールバック(黄バナー表示) | アカウント全体・ライブ |
-| 推移グラフ | 上記を毎分記録した自前の蓄積(`~/Library/Application Support/UsageBar/snapshots/`、90日保持)。**履歴はアプリ稼働中のみ**蓄積 | アカウント全体 |
+| 推移グラフ | 上記を毎分記録した自前の蓄積(`~/Library/Application Support/CCCX Usage Monitor/snapshots/`、90日保持)。**履歴はアプリ稼働中のみ**蓄積 | アカウント全体 |
 
 トークン数や金額ベースの表示は意図的にありません。API は使用率%しか返さず、トークン/コストを
 アカウント全体で正確に出す方法が存在しないためです(ローカルログ集計だと「そのMacの分だけ」になり誤解を招く)。
@@ -103,8 +103,8 @@ open "/Applications/CCCX Usage Monitor.app"
 ```
 Scripts/build-app.sh              # swiftc → .app 組み立て → ad-hoc 署名 → (--install)
 Support/Info.plist                # LSUIElement=true(常駐アプリ)
-Sources/UsageBar/
-  UsageBarApp.swift               # @main: MenuBarExtra(表示/非表示対応)
+Sources/CCCXUsageMonitor/
+  CCCXUsageMonitorApp.swift               # @main: MenuBarExtra(表示/非表示対応)
   AppState.swift                  # ポーリング・状態・履歴・未設定判定・締め出しガード
   Models/LimitModels.swift        # LimitSnapshot(期限切れ補正 effectivePercent)
   Services/
@@ -116,7 +116,6 @@ Sources/UsageBar/
   Views/                          # ポップオーバー / メニューバー描画 / HUD / ダッシュボード
 ```
 
-内部名(実行バイナリ・データフォルダ)は歴史的経緯で `UsageBar` です。
 
 ## 制限事項
 

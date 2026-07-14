@@ -7,6 +7,21 @@ import SwiftUI
 @MainActor
 enum FloatingHUDController {
     private static var panel: NSPanel?
+    private static var hosting: NSHostingView<FloatingHUDView>?
+
+    /// Re-fit the panel to its content (e.g. after expanding the detail
+    /// section), keeping the TOP edge anchored so it grows downward.
+    static func refreshSize() {
+        DispatchQueue.main.async {
+            guard let panel, let hosting else { return }
+            let newSize = hosting.fittingSize
+            var frame = panel.frame
+            let delta = newSize.height - frame.size.height
+            frame.origin.y -= delta
+            frame.size = newSize
+            panel.setFrame(frame, display: true, animate: false)
+        }
+    }
 
     static func applyStartupSetting(state: AppState) {
         if UserDefaults.standard.bool(forKey: "showFloatingHUD") {
@@ -20,6 +35,7 @@ enum FloatingHUDController {
         } else {
             panel?.orderOut(nil)
             panel = nil
+            hosting = nil
         }
     }
 
@@ -37,7 +53,10 @@ enum FloatingHUDController {
         p.isMovableByWindowBackground = true
         p.hidesOnDeactivate = false
         p.becomesKeyOnlyIfNeeded = true
-        p.contentView = NSHostingView(rootView: FloatingHUDView(state: state))
+        let hostingView = NSHostingView(rootView: FloatingHUDView(state: state))
+        p.contentView = hostingView
+        p.setContentSize(hostingView.fittingSize)
+        hosting = hostingView
 
         let autosave = "FloatingHUD"
         if !p.setFrameUsingName(autosave), let screen = NSScreen.main {
@@ -52,6 +71,9 @@ enum FloatingHUDController {
 
 struct FloatingHUDView: View {
     let state: AppState
+    @AppStorage("menuBarVisible") private var menuBarVisible = true
+    @AppStorage("showFloatingHUD") private var showFloatingHUD = false
+    @AppStorage("hudExpanded") private var expanded = false
 
     var body: some View {
         VStack(spacing: 8) {
@@ -70,6 +92,71 @@ struct FloatingHUDView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            if expanded {
+                Divider()
+                ForEach(state.sortedCurrentLimits, id: \.seriesKey) { l in
+                    VStack(alignment: .leading, spacing: 1) {
+                        HStack {
+                            Text(l.displayName)
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Int(l.effectivePercent))%")
+                                .font(.caption2.monospacedDigit())
+                                .fontWeight(.semibold)
+                        }
+                        if l.isExpired {
+                            Text("リセット済み — 次の取得で更新")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.tertiary)
+                        } else if let resets = l.resetsAt {
+                            Text("リセット: \(LimitGaugeRow.resetDetail(resets))")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    expanded.toggle()
+                    FloatingHUDController.refreshSize()
+                } label: {
+                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
+                }
+                .help(expanded ? "詳細を閉じる" : "リセット日時など詳細を表示")
+
+                Button {
+                    DashboardWindowController.show(state: state)
+                } label: {
+                    Image(systemName: "chart.xyaxis.line")
+                }
+                .help("ダッシュボードを開く")
+
+                Button {
+                    menuBarVisible.toggle()
+                } label: {
+                    Image(systemName: menuBarVisible ? "menubar.rectangle" : "menubar.dock.rectangle.badge.record")
+                }
+                .help(menuBarVisible ? "メニューバーの表示を隠す" : "メニューバーに表示する")
+
+                Spacer()
+
+                Button {
+                    guard menuBarVisible else { return }   // lockout guard
+                    showFloatingHUD = false
+                    FloatingHUDController.setEnabled(false, state: state)
+                } label: {
+                    Image(systemName: "xmark.circle")
+                }
+                .help(menuBarVisible ? "フローティング表示を閉じる" : "メニューバー非表示中は閉じられません")
+                .opacity(menuBarVisible ? 1 : 0.3)
+            }
+            .buttonStyle(.borderless)
+            .font(.system(size: 11))
+            .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)

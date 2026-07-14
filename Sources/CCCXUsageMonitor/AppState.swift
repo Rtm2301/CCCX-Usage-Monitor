@@ -35,6 +35,7 @@ final class AppState {
 
     func start() {
         guard pollTask == nil else { return }
+        migrateLegacyDefaults()
         limitHistory = snapshotStore.load(since: Date().addingTimeInterval(-90 * 86400))
         snapshotStore.prune()
 
@@ -46,8 +47,17 @@ final class AppState {
             lastAppended[s.seriesKey] = s
         }
 
+        // Lockout guard: never start with both the menu bar item and the HUD
+        // hidden — there would be no way to reach the app.
+        let defaults = UserDefaults.standard
+        if defaults.object(forKey: "menuBarVisible") != nil,
+           !defaults.bool(forKey: "menuBarVisible"),
+           !defaults.bool(forKey: "showFloatingHUD") {
+            defaults.set(true, forKey: "menuBarVisible")
+        }
+
         Task { [weak self] in
-            // NSApp isn't ready during App.init; apply the Dock setting shortly after.
+            // NSApp isn't ready during App.init; apply the HUD setting shortly after.
             try? await Task.sleep(for: .seconds(1))
             if let self { FloatingHUDController.applyStartupSetting(state: self) }
         }
@@ -61,6 +71,21 @@ final class AppState {
                 try? await Task.sleep(for: .seconds(interval))
             }
         }
+    }
+
+    /// One-time copy of settings and window positions from the old bundle id
+    /// (com.tomoaki.usagebar) after the rename to CCCX Usage Monitor.
+    private func migrateLegacyDefaults() {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "didMigrateFromUsageBar") == nil,
+              let legacy = UserDefaults(suiteName: "com.tomoaki.usagebar") else { return }
+        let keep = ["menuBarStyle", "pollIntervalSec", "showFloatingHUD",
+                    "menuBarVisible", "hudExpanded"]
+        for (key, value) in legacy.dictionaryRepresentation()
+        where keep.contains(key) || key.hasPrefix("NSWindow Frame") {
+            defaults.set(value, forKey: key)
+        }
+        defaults.set(true, forKey: "didMigrateFromUsageBar")
     }
 
     // MARK: - Limits (60 s)
@@ -110,7 +135,7 @@ final class AppState {
             // we don't sync up with other pollers (e.g. Usage for Claude).
             claudeBackoffSeconds = retryAfter + Double.random(in: 2...10)
         } else {
-            claudeBackoffSeconds = min(claudeBackoffSeconds * 2, 600)
+            claudeBackoffSeconds = min(claudeBackoffSeconds * 2, 300)
         }
         claudeBackoffUntil = Date().addingTimeInterval(claudeBackoffSeconds)
     }
@@ -174,11 +199,11 @@ final class AppState {
     // MARK: - Menu bar label
 
     /// The 5-hour window if the service has one; otherwise its highest window
-    /// (e.g. Codex on a weekly-only plan).
+    /// (e.g. Codex on a weekly-only plan). Expired windows count as 0.
     func displayPercent(service: String) -> Double? {
         let values = latestLimits.values.filter { $0.service == service }
-        return values.first { $0.windowMinutes == 300 }?.usedPercent
-            ?? values.map(\.usedPercent).max()
+        return values.first { $0.windowMinutes == 300 }?.effectivePercent
+            ?? values.map(\.effectivePercent).max()
     }
 
     var menuBarTitle: String {

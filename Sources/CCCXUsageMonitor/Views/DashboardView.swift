@@ -3,12 +3,14 @@ import SwiftUI
 /// Fixed color assignment per series/category — colors follow the entity,
 /// never the current filter or rank (dataviz rule).
 enum ChartPalette {
+    // Identity colors follow the rest of the app: Claude = warm colors,
+    // Codex = monochrome (white/black dot elsewhere → primary/gray here).
     static func limitSeriesColor(_ seriesKey: String) -> Color {
         switch seriesKey {
         case "claude:session": return .orange
         case "claude:weekly_all": return .red
-        case "codex:primary": return .blue
-        case "codex:secondary": return .teal
+        case "codex:primary": return .primary
+        case "codex:secondary": return .gray
         default: return .purple   // claude:weekly_scoped:*
         }
     }

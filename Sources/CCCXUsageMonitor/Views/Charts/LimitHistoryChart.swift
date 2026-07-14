@@ -94,6 +94,10 @@ struct LimitHistoryChart: View {
         return sessionWindows.first { $0.start <= selectedDate && selectedDate <= $0.end }
     }
 
+    /// Session-block color per service identity: Claude = blue blocks,
+    /// Codex = monochrome (matching its white/black identity elsewhere).
+    private var blockColor: Color { service == .claude ? .blue : .primary }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
@@ -176,7 +180,7 @@ struct LimitHistoryChart: View {
         HStack(spacing: 12) {
             if let w = selectedWindow {
                 Image(systemName: "clock")
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(blockColor)
                 Text("\(df.string(from: w.start)) → \(df.string(from: w.end))")
                     .font(.callout.monospacedDigit())
                 Text("ピーク \(Int(w.peak))%")
@@ -204,23 +208,23 @@ struct LimitHistoryChart: View {
             ForEach(sessionWindows) { w in
                 RuleMark(x: .value("枠開始", w.start))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .foregroundStyle(.blue.opacity(selectedWindow?.id == w.id ? 0.7 : 0.35))
+                    .foregroundStyle(blockColor.opacity(selectedWindow?.id == w.id ? 0.7 : 0.35))
                 RuleMark(x: .value("枠終了", w.end))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                    .foregroundStyle(.blue.opacity(selectedWindow?.id == w.id ? 0.7 : 0.35))
+                    .foregroundStyle(blockColor.opacity(selectedWindow?.id == w.id ? 0.7 : 0.35))
                 ForEach(w.samples, id: \.self) { s in
                     AreaMark(
                         x: .value("時刻", s.ts),
                         y: .value("使用率 %", s.usedPercent),
                         series: .value("枠", "w\(w.id)"))
                     .interpolationMethod(.stepEnd)
-                    .foregroundStyle(.blue.opacity(selectedWindow?.id == w.id ? 0.45 : 0.25))
+                    .foregroundStyle(blockColor.opacity(selectedWindow?.id == w.id ? 0.45 : 0.25))
                     LineMark(
                         x: .value("時刻", s.ts),
                         y: .value("使用率 %", s.usedPercent),
                         series: .value("枠", "w\(w.id)"))
                     .interpolationMethod(.stepEnd)
-                    .foregroundStyle(.blue)
+                    .foregroundStyle(blockColor)
                     .lineStyle(StrokeStyle(lineWidth: 1.5))
                 }
             }

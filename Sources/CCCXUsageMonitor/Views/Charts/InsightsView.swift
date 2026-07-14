@@ -92,7 +92,7 @@ struct InsightsView: View {
                     Divider()
                 }
                 if state.codexConfigured || codex.hasData {
-                    section(title: "Codex", tint: .blue, ins: codex)
+                    section(title: "Codex", tint: .primary, ins: codex)
                 }
 
                 if let since = state.limitHistory.map(\.ts).min() {

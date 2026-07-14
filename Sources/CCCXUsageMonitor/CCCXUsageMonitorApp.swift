@@ -2,8 +2,9 @@ import SwiftUI
 import AppKit
 
 @main
-struct UsageBarApp: App {
+struct CCCXUsageMonitorApp: App {
     @State private var state: AppState
+    @AppStorage("menuBarVisible") private var menuBarVisible = true
 
     init() {
         NSApp?.setActivationPolicy(.accessory)
@@ -13,18 +14,12 @@ struct UsageBarApp: App {
     }
 
     var body: some Scene {
-        MenuBarExtra {
+        MenuBarExtra(isInserted: $menuBarVisible) {
             PopoverView()
                 .environment(state)
         } label: {
             MenuBarIconLabel(state: state)
         }
         .menuBarExtraStyle(.window)
-
-        Window("CCCX Usage Monitor", id: "dashboard") {
-            DashboardView()
-                .environment(state)
-        }
-        .defaultSize(width: 940, height: 660)
     }
 }

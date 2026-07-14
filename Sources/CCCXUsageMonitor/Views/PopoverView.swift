@@ -2,9 +2,9 @@ import SwiftUI
 
 struct PopoverView: View {
     @Environment(AppState.self) private var state
-    @Environment(\.openWindow) private var openWindow
     @AppStorage("menuBarStyle") private var menuBarStyle = "bars"
     @AppStorage("showFloatingHUD") private var showFloatingHUD = false
+    @AppStorage("menuBarVisible") private var menuBarVisible = true
     @AppStorage("pollIntervalSec") private var pollInterval = 60.0
 
     var body: some View {
@@ -51,14 +51,25 @@ struct PopoverView: View {
                 .font(.caption)
                 .onChange(of: showFloatingHUD) { _, on in
                     FloatingHUDController.setEnabled(on, state: state)
+                    // Lockout guard: HUD off + menu bar hidden would strand the user.
+                    if !on && !menuBarVisible { menuBarVisible = true }
+                }
+
+            Toggle("メニューバーに表示", isOn: $menuBarVisible)
+                .font(.caption)
+                .onChange(of: menuBarVisible) { _, on in
+                    // Hiding the menu bar item requires the HUD as the remaining handle.
+                    if !on && !showFloatingHUD {
+                        showFloatingHUD = true
+                        FloatingHUDController.setEnabled(true, state: state)
+                    }
                 }
 
             Divider()
 
             HStack {
                 Button {
-                    openWindow(id: "dashboard")
-                    NSApp.activate(ignoringOtherApps: true)
+                    DashboardWindowController.show(state: state)
                 } label: {
                     Label("ダッシュボードを開く", systemImage: "chart.xyaxis.line")
                 }
@@ -125,7 +136,7 @@ struct LimitGaugeRow: View {
     let limit: LimitSnapshot
 
     private var barColor: Color {
-        switch limit.usedPercent {
+        switch limit.effectivePercent {
         case ..<60: return .green
         case ..<85: return .yellow
         default: return .red
@@ -138,13 +149,17 @@ struct LimitGaugeRow: View {
                 Text(limit.displayName)
                     .font(.callout)
                 Spacer()
-                Text("\(Int(limit.usedPercent))%")
+                Text("\(Int(limit.effectivePercent))%")
                     .font(.callout.monospacedDigit())
                     .fontWeight(.semibold)
             }
-            ProgressView(value: min(limit.usedPercent, 100), total: 100)
+            ProgressView(value: min(limit.effectivePercent, 100), total: 100)
                 .tint(barColor)
-            if let resets = limit.resetsAt {
+            if limit.isExpired {
+                Text("リセット済み — 次の取得で更新されます")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            } else if let resets = limit.resetsAt {
                 Text("リセット: \(Self.resetDetail(resets))")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
