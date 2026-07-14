@@ -1,9 +1,8 @@
 import SwiftUI
 
-/// GitHub-style activity heatmap built from the recorded limit history —
+/// GitHub-style activity heatmaps built from the recorded limit history —
 /// account-wide values (includes every machine), fills in from install day.
-/// Each day cell is split: top half = Claude (orange ramp),
-/// bottom half = Codex (monochrome ramp). No toggle — both at a glance.
+/// Two full grids stacked: Claude (orange ramp) on top, Codex (monochrome) below.
 struct ActivityGridView: View {
     @Environment(AppState.self) private var state
 
@@ -62,32 +61,20 @@ struct ActivityGridView: View {
         return result
     }
 
-    private func halfColor(_ stat: DayStat?, maxPoints: Double, base: Color) -> Color {
+    private func cellColor(_ stat: DayStat?, maxPoints: Double, base: Color) -> Color {
         guard let stat, stat.points > 1 else { return Color.gray.opacity(0.15) }
         let ratio = stat.points / max(maxPoints, 1)
         let level = ratio > 0.6 ? 1.0 : ratio > 0.3 ? 0.7 : ratio > 0.1 ? 0.45 : 0.25
         return base.opacity(level)
     }
 
-    private func tooltip(_ key: String, claude: DayStat?, codex: DayStat?) -> String {
-        func line(_ name: String, _ s: DayStat?, _ unit: String) -> String {
-            guard let s, s.points > 0 else { return "\(name): —" }
-            var t = "\(name): \(Int(s.points))%pt(\(unit)\(String(format: "%.1f", s.points / 100))個分)"
-            if s.hits > 0 { t += "・上限\(s.hits)回" }
-            return t
-        }
-        return "\(key)\n\(line("Claude", claude, "セッション枠"))\n\(line("Codex", codex, "週次枠"))"
-    }
-
     var body: some View {
-        let claudeStats = dayStats(service: "claude")
-        let codexStats = dayStats(service: "codex")
-        let maxClaude = claudeStats.values.map(\.points).max() ?? 1
-        let maxCodex = codexStats.values.map(\.points).max() ?? 1
-
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 14) {
             Text("アクティビティ")
                 .font(.headline)
+
+            let claudeStats = dayStats(service: "claude")
+            let codexStats = dayStats(service: "codex")
 
             if claudeStats.isEmpty && codexStats.isEmpty {
                 ContentUnavailableView(
@@ -95,55 +82,79 @@ struct ActivityGridView: View {
                     systemImage: "square.grid.3x3",
                     description: Text("アプリ稼働中に日ごとの消費量が蓄積されていきます"))
             } else {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 3) {
-                        weekdayLabels
-                        ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
-                            VStack(spacing: 3) {
-                                ForEach(0..<7, id: \.self) { i in
-                                    if let key = week[i] {
-                                        VStack(spacing: 1) {
-                                            UnevenRoundedRectangle(topLeadingRadius: 2.5, topTrailingRadius: 2.5)
-                                                .fill(halfColor(claudeStats[key], maxPoints: maxClaude, base: .orange))
-                                                .frame(width: 13, height: 6)
-                                            UnevenRoundedRectangle(bottomLeadingRadius: 2.5, bottomTrailingRadius: 2.5)
-                                                .fill(halfColor(codexStats[key], maxPoints: maxCodex, base: .primary))
-                                                .frame(width: 13, height: 6)
-                                        }
-                                        .help(tooltip(key, claude: claudeStats[key], codex: codexStats[key]))
-                                    } else {
-                                        Color.clear.frame(width: 13, height: 13)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    .padding(.vertical, 4)
-                }
-                .defaultScrollAnchor(.trailing)
+                gridSection(title: "Claude", service: "claude", unit: "セッション枠",
+                            stats: claudeStats, base: .orange)
+                gridSection(title: "Codex", service: "codex", unit: "週次枠",
+                            stats: codexStats, base: .primary)
 
-                HStack(spacing: 10) {
-                    HStack(spacing: 4) {
-                        ServiceDot(service: "claude")
-                        Text("上段 Claude")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    HStack(spacing: 4) {
-                        ServiceDot(service: "codex")
-                        Text("下段 Codex")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Text("色の濃さ = その日の消費量(全マシン合算)・記録はアプリ稼働中のみ")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Text("色の濃さ = その日に消費した枠の量(%pt換算・全マシン合算)。記録はアプリ稼働中のみ蓄積。")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(.horizontal)
         .padding(.top)
+    }
+
+    @ViewBuilder
+    private func gridSection(title: String, service: String, unit: String,
+                             stats: [String: DayStat], base: Color) -> some View {
+        let maxPoints = stats.values.map(\.points).max() ?? 1
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                ServiceDot(service: service)
+                Text(title)
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                legend(base: base)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 3) {
+                    weekdayLabels
+                    ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                        VStack(spacing: 3) {
+                            ForEach(0..<7, id: \.self) { i in
+                                if let key = week[i] {
+                                    let s = stats[key]
+                                    RoundedRectangle(cornerRadius: 2.5)
+                                        .fill(cellColor(s, maxPoints: maxPoints, base: base))
+                                        .frame(width: 13, height: 13)
+                                        .help(tooltip(key, stat: s, unit: unit))
+                                } else {
+                                    Color.clear.frame(width: 13, height: 13)
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .defaultScrollAnchor(.trailing)
+        }
+    }
+
+    private func tooltip(_ key: String, stat: DayStat?, unit: String) -> String {
+        guard let stat, stat.points > 0 else { return "\(key)\n利用なし(または未記録)" }
+        var t = "\(key)\n消費: \(Int(stat.points))%pt(\(unit)\(String(format: "%.1f", stat.points / 100))個分)"
+        if stat.hits > 0 { t += "\n上限到達: \(stat.hits)回" }
+        return t
+    }
+
+    private func legend(base: Color) -> some View {
+        HStack(spacing: 3) {
+            Text("少")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            ForEach([0.15, 0.25, 0.45, 0.7, 1.0], id: \.self) { level in
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(level == 0.15 ? Color.gray.opacity(0.15) : base.opacity(level))
+                    .frame(width: 9, height: 9)
+            }
+            Text("多")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 
     private var weekdayLabels: some View {
