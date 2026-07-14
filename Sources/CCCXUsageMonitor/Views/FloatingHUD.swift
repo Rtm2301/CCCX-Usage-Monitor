@@ -79,12 +79,12 @@ struct FloatingHUDView: View {
         VStack(spacing: 8) {
             if state.claudeConfigured {
                 row(label: "Claude", dot: .orange,
-                    pct: state.displayPercent(service: "claude"),
+                    limit: state.displayLimit(service: "claude"),
                     problem: state.claudeShowWarning)
             }
             if state.codexConfigured {
                 row(label: "Codex", dot: .white,
-                    pct: state.displayPercent(service: "codex"),
+                    limit: state.displayLimit(service: "codex"),
                     problem: state.codexStatus.isProblem && !state.codexIsFallback)
             }
             if !state.claudeConfigured && !state.codexConfigured {
@@ -164,8 +164,9 @@ struct FloatingHUDView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func row(label: String, dot: Color, pct: Double?, problem: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 3) {
+    private func row(label: String, dot: Color, limit: LimitSnapshot?, problem: Bool) -> some View {
+        let pct = limit?.effectivePercent
+        return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Circle()
                     .fill(dot)
@@ -174,6 +175,18 @@ struct FloatingHUDView: View {
                 Text(label)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // Time until this window resets (weekly when there is no 5h window).
+                if let limit {
+                    if limit.isExpired {
+                        Text("リセット済み")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    } else if let resets = limit.resetsAt {
+                        Text(LimitGaugeRow.remainingText(resets))
+                            .font(.system(size: 9))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
                 if problem {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 8))

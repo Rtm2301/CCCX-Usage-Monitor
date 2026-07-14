@@ -198,12 +198,17 @@ final class AppState {
 
     // MARK: - Menu bar label
 
-    /// The 5-hour window if the service has one; otherwise its highest window
-    /// (e.g. Codex on a weekly-only plan). Expired windows count as 0.
-    func displayPercent(service: String) -> Double? {
+    /// The headline window per service: 5-hour if it has one, otherwise its
+    /// highest window (e.g. Codex on a weekly-only plan).
+    func displayLimit(service: String) -> LimitSnapshot? {
         let values = latestLimits.values.filter { $0.service == service }
-        return values.first { $0.windowMinutes == 300 }?.effectivePercent
-            ?? values.map(\.effectivePercent).max()
+        return values.first { $0.windowMinutes == 300 }
+            ?? values.max { $0.effectivePercent < $1.effectivePercent }
+    }
+
+    /// Expired windows count as 0.
+    func displayPercent(service: String) -> Double? {
+        displayLimit(service: service)?.effectivePercent
     }
 
     var menuBarTitle: String {

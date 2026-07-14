@@ -167,29 +167,23 @@ struct LimitGaugeRow: View {
         }
     }
 
+    /// "あと1日19時間" — just the remaining-time part.
+    static func remainingText(_ date: Date) -> String {
+        let remain = date.timeIntervalSinceNow
+        if remain <= 60 { return "まもなく" }
+        let days = Int(remain) / 86400
+        let hours = (Int(remain) % 86400) / 3600
+        let minutes = (Int(remain) % 3600) / 60
+        if days > 0 { return "あと\(days)日\(hours)時間" }
+        return hours > 0 ? "あと\(hours)時間\(minutes)分" : "あと\(minutes)分"
+    }
+
     /// "7/16(木) 0:00(あと1日19時間)" — vague relative wording is useless
     /// for planning, so show the absolute time plus exact remaining time.
     static func resetDetail(_ date: Date) -> String {
         let df = DateFormatter()
         df.locale = Locale(identifier: "ja_JP")
         df.dateFormat = "M/d(E) H:mm"
-
-        let remain = date.timeIntervalSinceNow
-        let remainText: String
-        if remain <= 60 {
-            remainText = "まもなく"
-        } else {
-            let days = Int(remain) / 86400
-            let hours = (Int(remain) % 86400) / 3600
-            let minutes = (Int(remain) % 3600) / 60
-            if days > 0 {
-                remainText = "あと\(days)日\(hours)時間"
-            } else if hours > 0 {
-                remainText = "あと\(hours)時間\(minutes)分"
-            } else {
-                remainText = "あと\(minutes)分"
-            }
-        }
-        return "\(df.string(from: date))(\(remainText))"
+        return "\(df.string(from: date))(\(remainingText(date)))"
     }
 }
