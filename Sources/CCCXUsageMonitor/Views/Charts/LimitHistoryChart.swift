@@ -157,14 +157,23 @@ struct LimitHistoryChart: View {
 
     @ViewBuilder
     private var footnote: some View {
-        if service == .codex && sessionWindows.isEmpty {
-            Text("Codex は現在このプランでは週次制限のみ(5時間枠が復活すれば自動で点線枠が表示されます)。サーバー側の値・複数マシン合算。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-        } else {
-            Text("点線の箱 = 5時間セッション枠、折れ線 = 週次などの他ウィンドウ。サーバー側の値(複数マシン合算)、履歴はアプリ稼働中のみ蓄積。")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+        Text(footnoteText)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+    }
+
+    private var footnoteText: String {
+        let common = "サーバー側の値(複数マシン合算)、履歴はアプリ稼働中のみ蓄積。"
+        if !sessionWindows.isEmpty {
+            return "点線の箱 = 5時間セッション枠、折れ線 = 週次などの他ウィンドウ。" + common
+        }
+        switch service {
+        case .codex:
+            return "Codex は現在このプランでは週次制限のみ(5時間枠が復活すれば自動で点線枠が表示されます)。" + common
+        case .cursor, .copilot:
+            return "折れ線 = 月間ウィンドウの使用率。" + common
+        case .claude:
+            return common
         }
     }
 
