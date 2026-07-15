@@ -17,13 +17,17 @@ enum ServiceID: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Brand colors: Cursor #26251E (near-black), Copilot #6E40C9.
+    static let cursorBrand = Color(red: 0x26 / 255, green: 0x25 / 255, blue: 0x1E / 255)
+    static let copilotBrand = Color(red: 0x6E / 255, green: 0x40 / 255, blue: 0xC9 / 255)
+
     /// Identity dot fill (SwiftUI).
     var dotColor: Color {
         switch self {
         case .claude: return .orange
         case .codex: return .white
-        case .cursor: return .teal
-        case .copilot: return .blue
+        case .cursor: return Self.cursorBrand
+        case .copilot: return Self.copilotBrand
         }
     }
 
@@ -32,7 +36,8 @@ enum ServiceID: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return .white.opacity(0.8)
         case .codex: return .black.opacity(0.55)
-        default: return .white.opacity(0.6)
+        case .cursor: return .white.opacity(0.85)
+        case .copilot: return .black.opacity(0.8)
         }
     }
 
@@ -41,8 +46,9 @@ enum ServiceID: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return .systemOrange
         case .codex: return .white
-        case .cursor: return .systemTeal
-        case .copilot: return .systemBlue
+        // Pure brand-black is invisible on a dark menu bar — use a mid gray.
+        case .cursor: return NSColor(white: 0.6, alpha: 1)
+        case .copilot: return NSColor(red: 0x6E / 255, green: 0x40 / 255, blue: 0xC9 / 255, alpha: 1)
         }
     }
 
@@ -51,8 +57,8 @@ enum ServiceID: String, CaseIterable, Identifiable {
         switch self {
         case .claude: return .orange
         case .codex: return .primary
-        case .cursor: return .teal
-        case .copilot: return .blue
+        case .cursor: return .gray
+        case .copilot: return Self.copilotBrand
         }
     }
 

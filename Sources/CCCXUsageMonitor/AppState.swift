@@ -52,6 +52,14 @@ final class AppState {
         if on { Task { await refreshLimits() } }
     }
 
+    /// Plans are persisted so a fetch failure after restart doesn't blank them.
+    private func setPlan(_ s: ServiceID, _ plan: String?) {
+        guard let plan, !plan.isEmpty else { return }
+        plans[s] = plan
+        let dict = Dictionary(uniqueKeysWithValues: plans.map { ($0.key.rawValue, $0.value) })
+        UserDefaults.standard.set(dict, forKey: "plans")
+    }
+
     /// Services that should appear in the menu bar / HUD.
     var visibleServices: [ServiceID] {
         ServiceID.allCases.filter { isEnabled($0) && configured($0) }
@@ -79,6 +87,11 @@ final class AppState {
         migrateLegacyDefaults()
         if let saved = UserDefaults.standard.stringArray(forKey: "enabledServices") {
             enabledSet = Set(saved.compactMap(ServiceID.init(rawValue:)))
+        }
+        if let savedPlans = UserDefaults.standard.dictionary(forKey: "plans") as? [String: String] {
+            for (k, v) in savedPlans {
+                if let s = ServiceID(rawValue: k) { plans[s] = v }
+            }
         }
         limitHistory = snapshotStore.load(since: Date().addingTimeInterval(-90 * 86400))
         snapshotStore.prune()
@@ -144,7 +157,7 @@ final class AppState {
         do {
             let (snapshots, plan) = try await claudeClient.fetch()
             apply(snapshots: snapshots)
-            if let plan { plans[.claude] = plan }
+            setPlan(.claude, plan)
             configuredMap[.claude] = true
             statuses[.claude] = .ok(Date())
             claudeBackoffSeconds = Self.limitsInterval
@@ -187,7 +200,7 @@ final class AppState {
         do {
             let (snapshots, plan) = try await codexClient.fetchRateLimits()
             apply(snapshots: snapshots)
-            if let plan { plans[.codex] = plan }
+            setPlan(.codex, plan)
             codexIsFallback = false
             configuredMap[.codex] = true
             statuses[.codex] = .ok(Date())
@@ -210,7 +223,7 @@ final class AppState {
         do {
             let (snapshots, plan) = try await cursorClient.fetch()
             apply(snapshots: snapshots)
-            if let plan { plans[.cursor] = plan }
+            setPlan(.cursor, plan)
             configuredMap[.cursor] = true
             statuses[.cursor] = .ok(Date())
         } catch is CursorError where !FileManager.default.fileExists(
@@ -234,7 +247,7 @@ final class AppState {
         do {
             let (snapshots, plan) = try await copilotClient.fetch()
             apply(snapshots: snapshots)
-            if let plan { plans[.copilot] = plan }
+            setPlan(.copilot, plan)
             configuredMap[.copilot] = true
             statuses[.copilot] = .ok(Date())
         } catch CopilotError.notLoggedIn {

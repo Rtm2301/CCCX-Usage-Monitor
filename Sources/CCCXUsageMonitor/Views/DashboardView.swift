@@ -11,9 +11,9 @@ enum ChartPalette {
         case "claude:weekly_all": return .red
         case "codex:primary": return .primary
         case "codex:secondary": return .gray
-        case "cursor:monthly": return .teal
-        case "cursor:api": return .mint
-        case "copilot:premium": return .blue
+        case "cursor:monthly": return .gray
+        case "cursor:api": return Color(red: 0x8B / 255, green: 0x88 / 255, blue: 0x7D / 255)
+        case "copilot:premium": return ServiceID.copilotBrand
         default: return .purple   // claude:weekly_scoped:*
         }
     }

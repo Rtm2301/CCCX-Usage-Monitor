@@ -118,6 +118,7 @@ struct PopoverView: View {
             Text(planText.joined(separator: " ・ "))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
