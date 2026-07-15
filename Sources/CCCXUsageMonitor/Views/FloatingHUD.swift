@@ -77,17 +77,12 @@ struct FloatingHUDView: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            if state.claudeConfigured {
-                row(label: "Claude", dot: .orange,
-                    limit: state.displayLimit(service: "claude"),
-                    problem: state.claudeShowWarning)
+            ForEach(state.visibleServices) { s in
+                row(service: s,
+                    limit: state.displayLimit(service: s.rawValue),
+                    problem: state.showWarning(s))
             }
-            if state.codexConfigured {
-                row(label: "Codex", dot: .white,
-                    limit: state.displayLimit(service: "codex"),
-                    problem: state.codexStatus.isProblem && !state.codexIsFallback)
-            }
-            if !state.claudeConfigured && !state.codexConfigured {
+            if state.visibleServices.isEmpty {
                 Text("未検出")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -164,15 +159,15 @@ struct FloatingHUDView: View {
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private func row(label: String, dot: Color, limit: LimitSnapshot?, problem: Bool) -> some View {
+    private func row(service: ServiceID, limit: LimitSnapshot?, problem: Bool) -> some View {
         let pct = limit?.effectivePercent
         return VStack(alignment: .leading, spacing: 3) {
             HStack(spacing: 5) {
                 Circle()
-                    .fill(dot)
-                    .overlay(Circle().strokeBorder(dot == .white ? Color.black.opacity(0.5) : Color.white.opacity(0.8), lineWidth: 0.8))
+                    .fill(service.dotColor)
+                    .overlay(Circle().strokeBorder(service.dotRing, lineWidth: 0.8))
                     .frame(width: 7, height: 7)
-                Text(label)
+                Text(service.displayName)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 // Time until this window resets (weekly when there is no 5h window).

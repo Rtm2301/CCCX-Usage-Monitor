@@ -1,6 +1,7 @@
 # CCCX Usage Monitor
 
 **Claude Code と OpenAI Codex CLI の利用制限を、Mac のメニューバーで常時監視。**
+Cursor と GitHub Copilot の残量表示にも対応(設定でサービスごとに表示ON/OFF可)。
 
 > **CCCX** = **CC**(Claude Code)+ **CX**(Codex)
 
@@ -87,6 +88,8 @@ open "/Applications/CCCX Usage Monitor.app"
 | Claude 制限%(セッション/週次/モデル別) | Keychain の `Claude Code-credentials` から OAuth トークンを読み、`GET https://api.anthropic.com/api/oauth/usage`(ヘッダ `anthropic-beta: oauth-2025-04-20`)の `limits[]` をデコード。 | アカウント全体・ライブ |
 | Claude プラン | 同 Keychain の `subscriptionType` + `rateLimitTier`。 | — |
 | Codex 制限% | `codex app-server` を子プロセス常駐させ JSON-RPC `account/rateLimits/read` を毎分実行。不可時は `~/.codex/sessions/**/rollout-*.jsonl` の最終値にフォールバック(黄バナー表示)。 | アカウント全体・ライブ |
+| Cursor 月間使用率 | Cursor の設定DB(`state.vscdb`)のセッショントークンで `cursor.com/api/usage` を照会。リクエスト上限のあるプランで%表示(上限なしプランはプラン名のみ)。 | アカウント全体・ライブ |
+| Copilot プレミアム残量 | アプリ内の GitHub デバイスフロー・ログイン(初回のみ)で取得したトークンで `api.github.com/copilot_internal/user` を照会。 | アカウント全体・ライブ |
 | 推移グラフ | 上記を毎分記録した自前の蓄積(`~/Library/Application Support/CCCX Usage Monitor/snapshots/`、90日保持)。**履歴はアプリ稼働中のみ**蓄積。 | アカウント全体 |
 
 トークン数や金額ベースの表示は意図的にありません。API は使用率%しか返さず、トークン/コストを

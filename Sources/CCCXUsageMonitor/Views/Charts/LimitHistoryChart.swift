@@ -5,14 +5,8 @@ import AppKit
 struct LimitHistoryChart: View {
     @Environment(AppState.self) private var state
     @State private var range: HistoryRange = .day
-    @State private var service: Service = .claude
+    @State private var service: ServiceID = .claude
     @State private var selectedDate: Date?
-
-    enum Service: String, CaseIterable, Identifiable {
-        case claude = "Claude", codex = "Codex"
-        var id: String { rawValue }
-        var key: String { rawValue.lowercased() }
-    }
 
     enum HistoryRange: String, CaseIterable, Identifiable {
         case half = "12h", day = "24h", threeDays = "3d", week = "7d", month = "30d", quarter = "90d"
@@ -50,7 +44,7 @@ struct LimitHistoryChart: View {
     }
 
     private var serviceSamples: [LimitSnapshot] {
-        filtered.filter { $0.service == service.key }
+        filtered.filter { $0.service == service.rawValue }
     }
 
     /// 5-hour windows of the selected service (windowMinutes == 300),
@@ -96,7 +90,7 @@ struct LimitHistoryChart: View {
 
     /// Session-block color per service identity: Claude = blue blocks,
     /// Codex = monochrome (matching its white/black identity elsewhere).
-    private var blockColor: Color { service == .claude ? .blue : .primary }
+    private var blockColor: Color { service == .claude ? .blue : service.chartBase }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -104,7 +98,7 @@ struct LimitHistoryChart: View {
                 Text("制限消費率の推移")
                     .font(.headline)
                 Picker("サービス", selection: $service) {
-                    ForEach(Service.allCases) { Text($0.rawValue).tag($0) }
+                    ForEach(ServiceID.allCases) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
@@ -143,7 +137,7 @@ struct LimitHistoryChart: View {
     /// straight from the latest server values (handles ad-hoc resets too).
     @ViewBuilder
     private var resetsFooter: some View {
-        let limits = state.sortedCurrentLimits.filter { $0.service == service.key && $0.resetsAt != nil }
+        let limits = state.sortedCurrentLimits.filter { $0.service == service.rawValue && $0.resetsAt != nil }
         if !limits.isEmpty {
             HStack(spacing: 4) {
                 Image(systemName: "arrow.counterclockwise")

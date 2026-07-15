@@ -1,22 +1,27 @@
 import Foundation
 import Observation
+import AppKit
 
 @Observable
 @MainActor
 final class AppState {
     // Live limit state (by seriesKey), account-wide values from the servers.
     var latestLimits: [String: LimitSnapshot] = [:]
-    var claudeStatus: ServiceStatus = .unknown
-    var codexStatus: ServiceStatus = .unknown
-    var codexPlanType: String?
-    var claudePlan: String?
+    var statuses: [ServiceID: ServiceStatus] = [:]
+    var plans: [ServiceID: String] = [:]
 
     // False = the service isn't set up on this Mac (no credentials / no CLI).
-    // Unconfigured services are hidden entirely instead of shown as errors;
-    // re-checked every poll so they appear automatically once set up.
-    var claudeConfigured = true
-    var codexConfigured = true
+    // Unconfigured services are hidden instead of shown as errors; re-checked
+    // every poll so they appear automatically once set up.
+    var configuredMap: [ServiceID: Bool] = [.claude: true, .codex: true, .cursor: true, .copilot: false]
     var codexIsFallback = false
+
+    // Which services the user wants to see (popover toggles).
+    var enabledSet: Set<ServiceID> = Set(ServiceID.allCases)
+
+    // Copilot device-flow login state (popover UI).
+    var copilotDeviceCode: CopilotClient.DeviceCode?
+    var copilotLoginFailed = false
 
     // History for charts.
     var limitHistory: [LimitSnapshot] = []
@@ -24,6 +29,8 @@ final class AppState {
     private let claudeClient = ClaudeLimitsClient()
     private let codexClient = CodexAppServerClient()
     private let codexFallback = CodexLimitsReader()
+    private let cursorClient = CursorClient()
+    let copilotClient = CopilotClient()
     private let snapshotStore = SnapshotStore()
 
     private var pollTask: Task<Void, Never>?
@@ -31,24 +38,60 @@ final class AppState {
     private var claudeBackoffSeconds: Double = 60
     private var lastAppended: [String: LimitSnapshot] = [:]
 
-    static let limitsInterval: Double = 60      // 1-minute sync for both services
+    static let limitsInterval: Double = 60      // 1-minute sync
+
+    // MARK: - Accessors
+
+    func configured(_ s: ServiceID) -> Bool { configuredMap[s] ?? false }
+    func status(_ s: ServiceID) -> ServiceStatus { statuses[s] ?? .unknown }
+    func isEnabled(_ s: ServiceID) -> Bool { enabledSet.contains(s) }
+
+    func setEnabled(_ s: ServiceID, _ on: Bool) {
+        if on { enabledSet.insert(s) } else { enabledSet.remove(s) }
+        UserDefaults.standard.set(enabledSet.map(\.rawValue).sorted(), forKey: "enabledServices")
+        if on { Task { await refreshLimits() } }
+    }
+
+    /// Services that should appear in the menu bar / HUD.
+    var visibleServices: [ServiceID] {
+        ServiceID.allCases.filter { isEnabled($0) && configured($0) }
+    }
+
+    /// Warn only when data is actually old — a brief failure while we still
+    /// have minutes-fresh values isn't worth an alert icon.
+    func showWarning(_ s: ServiceID) -> Bool {
+        switch status(s) {
+        case .authError: return true
+        case .ok, .unknown: return false
+        case .stale, .fetchError:
+            return Date().timeIntervalSince(lastDataDate(s)) > 600
+        }
+    }
+
+    private func lastDataDate(_ s: ServiceID) -> Date {
+        latestLimits.values.filter { $0.service == s.rawValue }.map(\.ts).max() ?? .distantPast
+    }
+
+    // MARK: - Lifecycle
 
     func start() {
         guard pollTask == nil else { return }
         migrateLegacyDefaults()
+        if let saved = UserDefaults.standard.stringArray(forKey: "enabledServices") {
+            enabledSet = Set(saved.compactMap(ServiceID.init(rawValue:)))
+        }
         limitHistory = snapshotStore.load(since: Date().addingTimeInterval(-90 * 86400))
         snapshotStore.prune()
 
         // Seed current values from the last recorded snapshots so a restart
-        // (or a 429 right after launch) doesn't show "—" until the first fetch.
+        // doesn't show "—" until the first fetch.
         for s in limitHistory where s.ts > Date().addingTimeInterval(-3600) {
             if let existing = latestLimits[s.seriesKey], existing.ts >= s.ts { continue }
             latestLimits[s.seriesKey] = s
             lastAppended[s.seriesKey] = s
         }
 
-        // Lockout guard: never start with both the menu bar item and the HUD
-        // hidden — there would be no way to reach the app.
+        // Lockout guard: never start with both the menu bar item and the HUD hidden.
         let defaults = UserDefaults.standard
         if defaults.object(forKey: "menuBarVisible") != nil,
            !defaults.bool(forKey: "menuBarVisible"),
@@ -57,7 +100,6 @@ final class AppState {
         }
 
         Task { [weak self] in
-            // NSApp isn't ready during App.init; apply the HUD setting shortly after.
             try? await Task.sleep(for: .seconds(1))
             if let self { FloatingHUDController.applyStartupSetting(state: self) }
         }
@@ -73,8 +115,7 @@ final class AppState {
         }
     }
 
-    /// One-time copy of settings and window positions from the old bundle id
-    /// (com.tomoaki.usagebar) after the rename to CCCX Usage Monitor.
+    /// One-time copy of settings from the old bundle id after the rename.
     private func migrateLegacyDefaults() {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: "didMigrateFromUsageBar") == nil,
@@ -88,51 +129,52 @@ final class AppState {
         defaults.set(true, forKey: "didMigrateFromUsageBar")
     }
 
-    // MARK: - Limits (60 s)
+    // MARK: - Polling
 
     func refreshLimits() async {
-        async let claude: Void = refreshClaudeLimits()
-        async let codex: Void = refreshCodexLimits()
-        _ = await (claude, codex)
+        async let claude: Void = isEnabled(.claude) ? refreshClaude() : ()
+        async let codex: Void = isEnabled(.codex) ? refreshCodex() : ()
+        async let cursor: Void = isEnabled(.cursor) ? refreshCursor() : ()
+        async let copilot: Void = isEnabled(.copilot) ? refreshCopilot() : ()
+        _ = await (claude, codex, cursor, copilot)
     }
 
-    private func refreshClaudeLimits() async {
+    private func refreshClaude() async {
         guard Date() >= claudeBackoffUntil else { return }
         do {
             let (snapshots, plan) = try await claudeClient.fetch()
             apply(snapshots: snapshots)
-            claudePlan = plan
-            claudeConfigured = true
-            claudeStatus = .ok(Date())
+            if let plan { plans[.claude] = plan }
+            configuredMap[.claude] = true
+            statuses[.claude] = .ok(Date())
             claudeBackoffSeconds = Self.limitsInterval
         } catch let e as ClaudeAuthError {
             if case .notFound = e {
-                claudeConfigured = false
-                claudeStatus = .unknown
+                configuredMap[.claude] = false
+                statuses[.claude] = .unknown
             } else {
-                claudeStatus = .authError(e.localizedDescription)
+                statuses[.claude] = .authError(e.localizedDescription)
             }
         } catch let e as ClaudeLimitsError {
             switch e {
             case .tokenExpired:
-                claudeStatus = .authError(e.localizedDescription)
+                statuses[.claude] = .authError(e.localizedDescription)
             case .rateLimited(let retryAfter):
                 backoffClaude(retryAfter: retryAfter)
-                claudeStatus = .stale(lastClaudeDataDate(), e.localizedDescription)
+                statuses[.claude] = .stale(lastDataDate(.claude), e.localizedDescription)
             default:
                 backoffClaude(retryAfter: nil)
-                claudeStatus = .fetchError(e.localizedDescription)
+                statuses[.claude] = .fetchError(e.localizedDescription)
             }
         } catch {
             backoffClaude(retryAfter: nil)
-            claudeStatus = .fetchError(error.localizedDescription)
+            statuses[.claude] = .fetchError(error.localizedDescription)
         }
     }
 
     private func backoffClaude(retryAfter: TimeInterval?) {
         if let retryAfter {
-            // Respect the server's Retry-After (+ jitter to avoid syncing up
-            // with other pollers), but never stall for more than 10 minutes —
+            // Respect Retry-After (+ jitter) but never stall more than 10 min —
             // a huge header value once froze Claude updates for hours.
             claudeBackoffSeconds = min(max(retryAfter, 60), 600) + Double.random(in: 2...10)
         } else {
@@ -141,55 +183,95 @@ final class AppState {
         claudeBackoffUntil = Date().addingTimeInterval(claudeBackoffSeconds)
     }
 
-    /// Warn in the UI only when data is actually old — a brief 429 while we
-    /// still have minutes-fresh values isn't worth an alert icon.
-    var claudeShowWarning: Bool {
-        switch claudeStatus {
-        case .authError: return true
-        case .ok, .unknown: return false
-        case .stale, .fetchError:
-            return Date().timeIntervalSince(lastClaudeDataDate()) > 600
-        }
-    }
-
-    private func lastClaudeDataDate() -> Date {
-        latestLimits.values.filter { $0.service == "claude" }.map(\.ts).max() ?? .distantPast
-    }
-
-    private func refreshCodexLimits() async {
+    private func refreshCodex() async {
         do {
             let (snapshots, plan) = try await codexClient.fetchRateLimits()
             apply(snapshots: snapshots)
-            codexPlanType = plan
+            if let plan { plans[.codex] = plan }
             codexIsFallback = false
-            codexConfigured = true
-            codexStatus = .ok(Date())
+            configuredMap[.codex] = true
+            statuses[.codex] = .ok(Date())
         } catch {
-            // Fall back to the newest local rollout file.
             if let (snapshots, asOf) = codexFallback.latest() {
                 apply(snapshots: snapshots)
                 codexIsFallback = true
-                codexConfigured = true
-                codexStatus = .stale(asOf, "app-server不可 — 最終ローカル実行時点の値")
+                configuredMap[.codex] = true
+                statuses[.codex] = .stale(asOf, "app-server不可 — 最終ローカル実行時点の値")
             } else if case CodexAppServerError.binaryNotFound = error {
-                // No codex CLI and no session history: not set up on this Mac.
-                codexConfigured = false
-                codexStatus = .unknown
+                configuredMap[.codex] = false
+                statuses[.codex] = .unknown
             } else {
-                codexStatus = .fetchError(error.localizedDescription)
+                statuses[.codex] = .fetchError(error.localizedDescription)
             }
         }
     }
 
+    private func refreshCursor() async {
+        do {
+            let (snapshots, plan) = try await cursorClient.fetch()
+            apply(snapshots: snapshots)
+            if let plan { plans[.cursor] = plan }
+            configuredMap[.cursor] = true
+            statuses[.cursor] = .ok(Date())
+        } catch is CursorError where !FileManager.default.fileExists(
+            atPath: NSHomeDirectory() + "/Library/Application Support/Cursor/User/globalStorage/state.vscdb") {
+            configuredMap[.cursor] = false
+            statuses[.cursor] = .unknown
+        } catch CursorError.notInstalled {
+            configuredMap[.cursor] = false
+            statuses[.cursor] = .unknown
+        } catch {
+            statuses[.cursor] = .fetchError(error.localizedDescription)
+        }
+    }
+
+    private func refreshCopilot() async {
+        guard copilotClient.hasToken else {
+            configuredMap[.copilot] = false
+            statuses[.copilot] = .unknown
+            return
+        }
+        do {
+            let (snapshots, plan) = try await copilotClient.fetch()
+            apply(snapshots: snapshots)
+            if let plan { plans[.copilot] = plan }
+            configuredMap[.copilot] = true
+            statuses[.copilot] = .ok(Date())
+        } catch CopilotError.notLoggedIn {
+            statuses[.copilot] = .authError("Copilot のログインが無効です — 再ログインしてください")
+        } catch {
+            statuses[.copilot] = .fetchError(error.localizedDescription)
+        }
+    }
+
+    // MARK: - Copilot device-flow login (driven from the popover)
+
+    func startCopilotLogin() {
+        copilotLoginFailed = false
+        Task {
+            do {
+                let dc = try await copilotClient.startDeviceFlow()
+                copilotDeviceCode = dc
+                NSWorkspace.shared.open(URL(string: dc.verificationURI)!)
+                try await copilotClient.waitForToken(dc)
+                copilotDeviceCode = nil
+                await refreshCopilot()
+            } catch {
+                copilotDeviceCode = nil
+                copilotLoginFailed = true
+            }
+        }
+    }
+
+    // MARK: - Apply
+
     private func apply(snapshots: [LimitSnapshot]) {
         var toAppend: [LimitSnapshot] = []
         for s in snapshots {
-            // Never let an older snapshot (e.g. the Codex rollout-file
-            // fallback after a transient app-server failure) overwrite a
-            // newer live value — that briefly resurrected stale percentages.
+            // Never let an older snapshot (e.g. the Codex rollout-file fallback)
+            // overwrite a newer live value.
             if let existing = latestLimits[s.seriesKey], existing.ts > s.ts { continue }
             latestLimits[s.seriesKey] = s
-            // Skip persisting when nothing changed (keeps files small).
             let prev = lastAppended[s.seriesKey]
             if prev?.usedPercent != s.usedPercent || prev?.resetsAt != s.resetsAt {
                 toAppend.append(s)
@@ -201,38 +283,37 @@ final class AppState {
         limitHistory.append(contentsOf: toAppend)
     }
 
-    // MARK: - Menu bar label
+    // MARK: - Display helpers
 
     /// The headline window per service: 5-hour if it has one, otherwise its
-    /// highest window (e.g. Codex on a weekly-only plan).
+    /// highest window.
     func displayLimit(service: String) -> LimitSnapshot? {
         let values = latestLimits.values.filter { $0.service == service }
         return values.first { $0.windowMinutes == 300 }
             ?? values.max { $0.effectivePercent < $1.effectivePercent }
     }
 
-    /// Expired windows count as 0.
     func displayPercent(service: String) -> Double? {
         displayLimit(service: service)?.effectivePercent
     }
 
     var menuBarTitle: String {
-        func part(_ prefix: String, service: String, problem: Bool) -> String {
-            guard let pct = displayPercent(service: service) else {
-                return "\(prefix) —\(problem ? "⚠" : "")"
+        let parts = visibleServices.map { s in
+            let warn = showWarning(s) ? "⚠" : ""
+            guard let pct = displayPercent(service: s.rawValue) else {
+                return "\(s.displayName) —\(warn)"
             }
-            return "\(prefix) \(Int(pct))%\(problem ? "⚠" : "")"
+            return "\(s.displayName) \(Int(pct))%\(warn)"
         }
-        var parts: [String] = []
-        if claudeConfigured { parts.append(part("C", service: "claude", problem: claudeShowWarning)) }
-        if codexConfigured { parts.append(part("X", service: "codex", problem: codexStatus.isProblem && !codexIsFallback)) }
         return parts.isEmpty ? "—" : parts.joined(separator: " · ")
     }
 
     var sortedCurrentLimits: [LimitSnapshot] {
-        latestLimits.values.sorted { a, b in
-            if a.service != b.service { return a.service < b.service }
-            return a.seriesKey < b.seriesKey
-        }
+        latestLimits.values
+            .filter { s in ServiceID(rawValue: s.service).map(isEnabled) ?? true }
+            .sorted { a, b in
+                if a.service != b.service { return a.service < b.service }
+                return a.seriesKey < b.seriesKey
+            }
     }
 }

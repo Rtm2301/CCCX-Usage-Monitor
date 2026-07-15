@@ -12,10 +12,10 @@ struct ActivityGridView: View {
     }
 
     /// Daily consumption per service from positive deltas of the recorded %.
-    private func dayStats(service: String) -> [String: DayStat] {
+    private func dayStats(service: ServiceID) -> [String: DayStat] {
         let samples = state.limitHistory
-            .filter { $0.service == service }
-            .filter { service == "claude" ? $0.windowMinutes == 300 : $0.seriesKey == "codex:primary" }
+            .filter { $0.service == service.rawValue }
+            .filter { service == .claude ? $0.windowMinutes == 300 : $0.seriesKey == service.primarySeriesKey }
             .sorted { $0.ts < $1.ts }
 
         let dayF = DateFormatter()
@@ -68,24 +68,33 @@ struct ActivityGridView: View {
         return base.opacity(level)
     }
 
+    private func unit(_ s: ServiceID) -> String {
+        switch s {
+        case .claude: return "セッション枠"
+        case .codex: return "週次枠"
+        case .cursor, .copilot: return "月間枠"
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("アクティビティ")
                 .font(.headline)
 
-            let claudeStats = dayStats(service: "claude")
-            let codexStats = dayStats(service: "codex")
+            let visible = ServiceID.allCases.filter { s in
+                state.isEnabled(s) && !dayStats(service: s).isEmpty
+            }
 
-            if claudeStats.isEmpty && codexStats.isEmpty {
+            if visible.isEmpty {
                 ContentUnavailableView(
                     "まだ記録がありません",
                     systemImage: "square.grid.3x3",
                     description: Text("アプリ稼働中に日ごとの消費量が蓄積されていきます。"))
             } else {
-                gridSection(title: "Claude", service: "claude", unit: "セッション枠",
-                            stats: claudeStats, base: .orange)
-                gridSection(title: "Codex", service: "codex", unit: "週次枠",
-                            stats: codexStats, base: .primary)
+                ForEach(visible) { s in
+                    gridSection(title: s.displayName, service: s.rawValue, unit: unit(s),
+                                stats: dayStats(service: s), base: s.chartBase)
+                }
 
                 Text("色の濃さ = その日に消費した枠の量(%pt換算・全マシン合算)。記録はアプリ稼働中のみ蓄積。")
                     .font(.caption2)

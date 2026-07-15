@@ -22,6 +22,23 @@ struct PopoverView: View {
 
             Divider()
 
+            HStack(spacing: 6) {
+                Text("サービス")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ForEach(ServiceID.allCases) { s in
+                    Toggle(isOn: Binding(
+                        get: { state.isEnabled(s) },
+                        set: { state.setEnabled(s, $0) })) {
+                        Text(s.displayName)
+                            .font(.caption2)
+                    }
+                    .toggleStyle(.button)
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
+                }
+            }
+
             HStack(spacing: 8) {
                 Text("メニューバー")
                     .font(.caption)
@@ -84,37 +101,79 @@ struct PopoverView: View {
 
     @ViewBuilder
     private var statusBanners: some View {
-        if !state.claudeConfigured && !state.codexConfigured {
-            BannerView(text: "Claude Code / Codex が見つかりません。ログインまたはインストールすると自動で表示されます。", color: .gray)
+        if state.visibleServices.isEmpty {
+            BannerView(text: "監視できるサービスが見つかりません。ログインまたはインストールすると自動で表示されます。", color: .gray)
         }
 
-        if state.claudeConfigured {
-            if case .authError(let msg) = state.claudeStatus {
-                BannerView(text: "Claude: \(msg)", color: .orange)
-            } else if state.claudeShowWarning {
-                if case .fetchError(let msg) = state.claudeStatus {
-                    BannerView(text: "Claude: \(msg)", color: .red)
-                } else if case .stale(_, let reason) = state.claudeStatus {
-                    BannerView(text: "Claude: \(reason)", color: .yellow)
-                }
-            }
+        ForEach(state.visibleServices) { s in
+            serviceBanner(s)
         }
 
-        if state.codexConfigured {
-            if case .stale(let asOf, let reason) = state.codexStatus {
-                BannerView(text: "Codex: \(reason) (\(asOf.formatted(date: .omitted, time: .shortened)))", color: .yellow)
-            } else if case .fetchError(let msg) = state.codexStatus {
-                BannerView(text: "Codex: \(msg)", color: .red)
-            }
-        }
+        copilotLoginRow
 
-        if state.claudePlan != nil || state.codexPlanType != nil {
-            Text([
-                state.claudePlan.map { "Claude plan: \($0)" },
-                state.codexPlanType.map { "Codex plan: \($0)" },
-            ].compactMap { $0 }.joined(separator: " ・ "))
+        let planText = ServiceID.allCases.compactMap { s -> String? in
+            guard state.isEnabled(s), let plan = state.plans[s] else { return nil }
+            return "\(s.displayName): \(plan)"
+        }
+        if !planText.isEmpty {
+            Text(planText.joined(separator: " ・ "))
                 .font(.caption2)
                 .foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func serviceBanner(_ s: ServiceID) -> some View {
+        switch state.status(s) {
+        case .authError(let msg):
+            BannerView(text: "\(s.displayName): \(msg)", color: .orange)
+        case .stale(let asOf, let reason):
+            if state.showWarning(s) || s == .codex {
+                BannerView(text: "\(s.displayName): \(reason) (\(asOf.formatted(date: .omitted, time: .shortened)))", color: .yellow)
+            }
+        case .fetchError(let msg):
+            if state.showWarning(s) {
+                BannerView(text: "\(s.displayName): \(msg)", color: .red)
+            }
+        case .ok, .unknown:
+            EmptyView()
+        }
+    }
+
+    /// Copilot needs its own GitHub device-flow login (no local token source).
+    @ViewBuilder
+    private var copilotLoginRow: some View {
+        if state.isEnabled(.copilot) && !state.configured(.copilot) {
+            if let dc = state.copilotDeviceCode {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ブラウザでコードを入力してください:")
+                        .font(.caption)
+                    HStack {
+                        Text(dc.userCode)
+                            .font(.title3.monospaced())
+                            .textSelection(.enabled)
+                        Button("コピー") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(dc.userCode, forType: .string)
+                        }
+                        .font(.caption)
+                    }
+                }
+                .padding(6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Color.blue.opacity(0.1), in: RoundedRectangle(cornerRadius: 6))
+            } else {
+                HStack {
+                    ServiceDot(service: "copilot")
+                    Button("GitHub Copilot にログイン") { state.startCopilotLogin() }
+                        .font(.caption)
+                    if state.copilotLoginFailed {
+                        Text("失敗 — 再試行してください")
+                            .font(.caption2)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
         }
     }
 }

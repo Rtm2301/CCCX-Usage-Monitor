@@ -21,9 +21,9 @@ struct InsightsView: View {
         r.hasData = true
 
         let session = samples.filter { $0.windowMinutes == 300 }.sorted { $0.ts < $1.ts }
-        // Main weekly window only — don't mix model-scoped weekly windows
+        // Main window only — don't mix model-scoped weekly windows
         // (claude:weekly_scoped:*) into the average.
-        let weeklyKey = service == "claude" ? "claude:weekly_all" : "codex:primary"
+        let weeklyKey = ServiceID(rawValue: service)?.primarySeriesKey ?? "\(service):primary"
         var weekly = samples.filter { $0.seriesKey == weeklyKey && ($0.windowMinutes ?? 0) > 300 }
             .sorted { $0.ts < $1.ts }
         if weekly.isEmpty {
@@ -83,16 +83,13 @@ struct InsightsView: View {
                     systemImage: "lightbulb",
                     description: Text("アプリ稼働中に記録が蓄積されると自動で分析されます。"))
             } else {
-                let claude = compute(service: "claude")
-                let codex = compute(service: "codex")
-                if state.claudeConfigured || claude.hasData {
-                    section(title: "Claude", service: "claude", ins: claude)
+                let visible = ServiceID.allCases.filter { s in
+                    state.isEnabled(s) && (state.configured(s) || compute(service: s.rawValue).hasData)
                 }
-                if (state.claudeConfigured || claude.hasData) && (state.codexConfigured || codex.hasData) {
-                    Divider()
-                }
-                if state.codexConfigured || codex.hasData {
-                    section(title: "Codex", service: "codex", ins: codex)
+                ForEach(Array(visible.enumerated()), id: \.element) { i, s in
+                    if i > 0 { Divider() }
+                    section(title: s.displayName, service: s.rawValue,
+                            ins: compute(service: s.rawValue))
                 }
 
                 if let since = state.limitHistory.map(\.ts).min() {
@@ -130,7 +127,7 @@ struct InsightsView: View {
                             ?? (ins.hits == 0 ? "上限到達なし。" : ""))
                     InsightCard(
                         icon: "calendar", tint: .blue,
-                        title: "平均週次使用率",
+                        title: (service == "cursor" || service == "copilot") ? "平均月間使用率" : "平均週次使用率",
                         value: ins.avgWeekly.map { "\(Int($0))%" } ?? "—",
                         detail: weeklyComment(ins.avgWeekly))
                     InsightCard(

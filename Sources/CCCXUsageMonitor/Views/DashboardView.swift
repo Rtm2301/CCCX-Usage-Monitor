@@ -11,6 +11,8 @@ enum ChartPalette {
         case "claude:weekly_all": return .red
         case "codex:primary": return .primary
         case "codex:secondary": return .gray
+        case "cursor:monthly": return .teal
+        case "copilot:premium": return .blue
         default: return .purple   // claude:weekly_scoped:*
         }
     }
@@ -30,14 +32,13 @@ enum ChartPalette {
 /// Identity dot matching the menu bar / HUD: orange = Claude,
 /// white with black edge = Codex.
 struct ServiceDot: View {
-    let service: String   // "claude" | "codex"
+    let service: String   // ServiceID rawValue
 
     var body: some View {
+        let s = ServiceID(rawValue: service) ?? .claude
         Circle()
-            .fill(service == "claude" ? Color.orange : Color.white)
-            .overlay(Circle().strokeBorder(
-                service == "claude" ? Color.white.opacity(0.8) : Color.black.opacity(0.55),
-                lineWidth: 0.8))
+            .fill(s.dotColor)
+            .overlay(Circle().strokeBorder(s.dotRing, lineWidth: 0.8))
             .frame(width: 9, height: 9)
     }
 }

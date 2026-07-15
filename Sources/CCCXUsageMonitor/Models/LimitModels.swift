@@ -14,7 +14,7 @@ struct LimitSnapshot: Codable, Hashable {
 }
 
 extension LimitSnapshot {
-    var service: String { seriesKey.hasPrefix("claude") ? "claude" : "codex" }
+    var service: String { String(seriesKey.prefix(while: { $0 != ":" })) }
 
     /// The window has reset since this value was fetched — the recorded
     /// percent no longer reflects reality (a fresh window starts at 0).
@@ -32,6 +32,8 @@ extension LimitSnapshot {
         case "claude:weekly_all": return "Claude 週次 (全体)"
         case "codex:primary": return "Codex 週次"
         case "codex:secondary": return "Codex セカンダリ"
+        case "cursor:monthly": return "Cursor 月間"
+        case "copilot:premium": return "Copilot プレミアム"
         default:
             if seriesKey.hasPrefix("claude:weekly_scoped:") {
                 let model = seriesKey.components(separatedBy: ":").last ?? "?"
