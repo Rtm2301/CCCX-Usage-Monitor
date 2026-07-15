@@ -47,7 +47,10 @@ struct CursorClient {
         guard let sub = jwtSub(token) else { throw CursorError.tokenUnreadable }
         let userId = sub.components(separatedBy: "|").last ?? sub
 
-        var req = URLRequest(url: URL(string: "https://cursor.com/api/usage?user=\(sub)")!,
+        _ = sub
+        // New billing system endpoint (verified live 2026-07-15):
+        // totalPercentUsed / apiPercentUsed + billing cycle end (= reset).
+        var req = URLRequest(url: URL(string: "https://cursor.com/api/usage-summary")!,
                              timeoutInterval: 10)
         req.setValue("WorkosCursorSessionToken=\(userId)%3A%3A\(token)", forHTTPHeaderField: "Cookie")
         let (data, resp) = try await URLSession.shared.data(for: req)
@@ -57,25 +60,25 @@ struct CursorClient {
             throw CursorError.httpError(0)
         }
 
-        // {"gpt-4": {numRequests, maxRequestUsage, ...}, "startOfMonth": ISO}
+        let resets = ClaudeLimitsClient.parseISO(obj["billingCycleEnd"] as? String)
+        let planName = (obj["membershipType"] as? String) ?? plan
         var snapshots: [LimitSnapshot] = []
-        if let bucket = obj["gpt-4"] as? [String: Any],
-           let used = anyToDouble(bucket["numRequests"]) {
-            var resets: Date?
-            if let som = ClaudeLimitsClient.parseISO(obj["startOfMonth"] as? String) {
-                resets = Calendar.current.date(byAdding: .month, value: 1, to: som)
-            }
-            if let maxReq = anyToDouble(bucket["maxRequestUsage"]), maxReq > 0 {
+        if let individual = obj["individualUsage"] as? [String: Any],
+           let planUsage = individual["plan"] as? [String: Any] {
+            if let total = anyToDouble(planUsage["totalPercentUsed"]) {
                 snapshots.append(LimitSnapshot(
                     ts: Date(), seriesKey: "cursor:monthly",
-                    usedPercent: min(used / maxReq * 100, 100),
+                    usedPercent: min(max(total, 0), 100),
                     resetsAt: resets, windowMinutes: 43200, severity: nil))
             }
-            // Plans without a request cap (free / usage-based) have max == null:
-            // nothing meaningful to chart, so no snapshot — the service still
-            // shows as configured with its plan name.
+            if let api = anyToDouble(planUsage["apiPercentUsed"]), api > 0 {
+                snapshots.append(LimitSnapshot(
+                    ts: Date(), seriesKey: "cursor:api",
+                    usedPercent: min(max(api, 0), 100),
+                    resetsAt: resets, windowMinutes: 43200, severity: nil))
+            }
         }
-        return (snapshots, plan)
+        return (snapshots, planName)
     }
 
     private func jwtSub(_ jwt: String) -> String? {

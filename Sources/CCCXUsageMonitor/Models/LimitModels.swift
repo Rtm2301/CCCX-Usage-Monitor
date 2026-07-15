@@ -32,7 +32,8 @@ extension LimitSnapshot {
         case "claude:weekly_all": return "Claude 週次 (全体)"
         case "codex:primary": return "Codex 週次"
         case "codex:secondary": return "Codex セカンダリ"
-        case "cursor:monthly": return "Cursor 月間"
+        case "cursor:monthly": return "Cursor 月間 (総合)"
+        case "cursor:api": return "Cursor API枠"
         case "copilot:premium": return "Copilot プレミアム"
         default:
             if seriesKey.hasPrefix("claude:weekly_scoped:") {

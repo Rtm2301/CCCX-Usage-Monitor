@@ -12,6 +12,7 @@ enum ChartPalette {
         case "codex:primary": return .primary
         case "codex:secondary": return .gray
         case "cursor:monthly": return .teal
+        case "cursor:api": return .mint
         case "copilot:premium": return .blue
         default: return .purple   // claude:weekly_scoped:*
         }
