@@ -98,11 +98,11 @@ struct LimitHistoryChart: View {
                 .font(.headline)
             HStack {
                 Picker("サービス", selection: $service) {
-                    ForEach(ServiceID.allCases) { Text($0.displayName).tag($0) }
+                    ForEach(enabledServices) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 300)
+                .frame(width: CGFloat(enabledServices.count) * 75)
                 Spacer()
                 Button {
                     exportCSV()
@@ -130,27 +130,38 @@ struct LimitHistoryChart: View {
                 footnote
             }
 
-            officialLinks
+            officialLink
         }
         .padding()
+        .onAppear { ensureValidSelection() }
+        .onChange(of: state.enabledSet) { _, _ in ensureValidSelection() }
     }
 
-    /// Quick links to each service's official usage page.
-    private var officialLinks: some View {
-        HStack(spacing: 14) {
+    private var enabledServices: [ServiceID] {
+        ServiceID.allCases.filter { state.isEnabled($0) }
+    }
+
+    /// Keep the selection on an enabled service when toggles change.
+    private func ensureValidSelection() {
+        if !state.isEnabled(service), let first = enabledServices.first {
+            service = first
+        }
+    }
+
+    /// Link to the selected service's official usage page.
+    private var officialLink: some View {
+        HStack(spacing: 6) {
             Text("公式ページ:")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-            ForEach(ServiceID.allCases.filter { state.isEnabled($0) }) { s in
-                Link(destination: s.officialUsageURL) {
-                    HStack(spacing: 3) {
-                        ServiceDot(service: s.rawValue)
-                        Text(s.displayName)
-                        Image(systemName: "arrow.up.right")
-                            .font(.system(size: 8))
-                    }
-                    .font(.caption2)
+            Link(destination: service.officialUsageURL) {
+                HStack(spacing: 3) {
+                    ServiceDot(service: service.rawValue)
+                    Text("\(service.displayName) の使用量を開く")
+                    Image(systemName: "arrow.up.right")
+                        .font(.system(size: 8))
                 }
+                .font(.caption2)
             }
             Spacer()
         }

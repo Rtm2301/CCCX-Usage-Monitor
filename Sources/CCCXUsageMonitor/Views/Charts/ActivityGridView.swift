@@ -120,6 +120,13 @@ struct ActivityGridView: View {
                 ServiceDot(service: service)
                 Text(title)
                     .font(.subheadline.weight(.semibold))
+                if let s = ServiceID(rawValue: service) {
+                    Link(destination: s.officialUsageURL) {
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 9))
+                    }
+                    .help("\(s.displayName) の公式使用量ページを開く")
+                }
                 Spacer()
                 legend(base: base)
             }
