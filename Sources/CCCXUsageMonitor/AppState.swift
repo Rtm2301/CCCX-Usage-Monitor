@@ -37,6 +37,7 @@ final class AppState {
     private var claudeBackoffUntil: Date = .distantPast
     private var claudeBackoffSeconds: Double = 60
     private var lastAppended: [String: LimitSnapshot] = [:]
+    private var notifiedWindows: Set<String> = []
 
     static let limitsInterval: Double = 60      // 1-minute sync
 
@@ -285,6 +286,7 @@ final class AppState {
             // overwrite a newer live value.
             if let existing = latestLimits[s.seriesKey], existing.ts > s.ts { continue }
             latestLimits[s.seriesKey] = s
+            checkNotifyThreshold(s)
             let prev = lastAppended[s.seriesKey]
             if prev?.usedPercent != s.usedPercent || prev?.resetsAt != s.resetsAt {
                 toAppend.append(s)
@@ -294,6 +296,20 @@ final class AppState {
         guard !toAppend.isEmpty else { return }
         snapshotStore.append(toAppend)
         limitHistory.append(contentsOf: toAppend)
+    }
+
+    /// One notification per window when it crosses the configured threshold
+    /// (0 = off). The window key includes resets_at, so each new window can
+    /// notify again.
+    private func checkNotifyThreshold(_ s: LimitSnapshot) {
+        let threshold = UserDefaults.standard.double(forKey: "notifyThreshold")
+        guard threshold > 0, s.usedPercent >= threshold, !s.isExpired else { return }
+        let windowKey = "\(s.seriesKey)|\(s.resetsAt?.timeIntervalSince1970 ?? 0)"
+        guard !notifiedWindows.contains(windowKey) else { return }
+        notifiedWindows.insert(windowKey)
+        var body = "現在 \(Int(s.usedPercent))%"
+        if let r = s.resetsAt { body += " — リセット: \(LimitGaugeRow.resetDetail(r))" }
+        Notifier.send(title: "\(s.displayName) が \(Int(threshold))% に到達", body: body)
     }
 
     // MARK: - Display helpers

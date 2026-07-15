@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 struct PopoverView: View {
     @Environment(AppState.self) private var state
@@ -6,6 +7,8 @@ struct PopoverView: View {
     @AppStorage("showFloatingHUD") private var showFloatingHUD = false
     @AppStorage("menuBarVisible") private var menuBarVisible = true
     @AppStorage("pollIntervalSec") private var pollInterval = 60.0
+    @AppStorage("notifyThreshold") private var notifyThreshold = 0.0
+    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -62,6 +65,34 @@ struct PopoverView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+
+            HStack(spacing: 8) {
+                Text("通知")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Picker("通知しきい値", selection: $notifyThreshold) {
+                    Text("オフ").tag(0.0)
+                    Text("80%").tag(80.0)
+                    Text("90%").tag(90.0)
+                    Text("100%").tag(100.0)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .onChange(of: notifyThreshold) { _, v in
+                    if v > 0 { Notifier.requestAuthorization() }
+                }
+            }
+
+            Toggle("ログイン時に起動", isOn: $launchAtLogin)
+                .font(.caption)
+                .onChange(of: launchAtLogin) { _, on in
+                    do {
+                        if on { try SMAppService.mainApp.register() }
+                        else { try SMAppService.mainApp.unregister() }
+                    } catch {
+                        launchAtLogin = SMAppService.mainApp.status == .enabled
+                    }
+                }
 
             Toggle("フローティング表示(常に最前面)", isOn: $showFloatingHUD)
                 .font(.caption)
