@@ -184,6 +184,10 @@ final class AppState {
     private func apply(snapshots: [LimitSnapshot]) {
         var toAppend: [LimitSnapshot] = []
         for s in snapshots {
+            // Never let an older snapshot (e.g. the Codex rollout-file
+            // fallback after a transient app-server failure) overwrite a
+            // newer live value — that briefly resurrected stale percentages.
+            if let existing = latestLimits[s.seriesKey], existing.ts > s.ts { continue }
             latestLimits[s.seriesKey] = s
             // Skip persisting when nothing changed (keeps files small).
             let prev = lastAppended[s.seriesKey]
