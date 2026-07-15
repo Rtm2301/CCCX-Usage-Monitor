@@ -26,6 +26,10 @@ final class AppState {
     // History for charts.
     var limitHistory: [LimitSnapshot] = []
 
+    /// Next scheduled Claude retry while the usage API is rate-limiting us.
+    /// Non-nil only during a 429 backoff; shown as a banner in the popover.
+    var claudeRetryAt: Date?
+
     private let claudeClient = ClaudeLimitsClient()
     private let codexClient = CodexAppServerClient()
     private let codexFallback = CodexLimitsReader()
@@ -162,6 +166,7 @@ final class AppState {
             configuredMap[.claude] = true
             statuses[.claude] = .ok(Date())
             claudeBackoffSeconds = Self.limitsInterval
+            claudeRetryAt = nil
         } catch let e as ClaudeAuthError {
             if case .notFound = e {
                 configuredMap[.claude] = false
@@ -172,25 +177,30 @@ final class AppState {
         } catch let e as ClaudeLimitsError {
             switch e {
             case .tokenExpired:
+                claudeRetryAt = nil
                 statuses[.claude] = .authError(e.localizedDescription)
             case .rateLimited(let retryAfter):
                 backoffClaude(retryAfter: retryAfter)
+                claudeRetryAt = claudeBackoffUntil
                 statuses[.claude] = .stale(lastDataDate(.claude), e.localizedDescription)
             default:
                 backoffClaude(retryAfter: nil)
+                claudeRetryAt = nil
                 statuses[.claude] = .fetchError(e.localizedDescription)
             }
         } catch {
             backoffClaude(retryAfter: nil)
+            claudeRetryAt = nil
             statuses[.claude] = .fetchError(error.localizedDescription)
         }
     }
 
     private func backoffClaude(retryAfter: TimeInterval?) {
         if let retryAfter {
-            // Respect Retry-After (+ jitter) but never stall more than 10 min —
-            // a huge header value once froze Claude updates for hours.
-            claudeBackoffSeconds = min(max(retryAfter, 60), 600) + Double.random(in: 2...10)
+            // Honor the server's Retry-After verbatim (60s floor + jitter).
+            // Clamping it to 10 min once caused an endless 429 loop: each
+            // early retry kept the server-side window from ever clearing.
+            claudeBackoffSeconds = max(retryAfter, 60) + Double.random(in: 5...30)
         } else {
             claudeBackoffSeconds = min(claudeBackoffSeconds * 2, 300)
         }

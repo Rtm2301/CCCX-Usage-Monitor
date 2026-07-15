@@ -159,7 +159,9 @@ struct PopoverView: View {
         case .authError(let msg):
             BannerView(text: "\(s.displayName): \(msg)", color: .orange)
         case .stale(let asOf, let reason):
-            if state.showWarning(s) || s == .codex {
+            if s == .claude, let retry = state.claudeRetryAt {
+                BannerView(text: "\(s.displayName): \(reason) — \(retry.formatted(date: .omitted, time: .shortened))頃に再取得します。(最終 \(asOf.formatted(date: .omitted, time: .shortened)))", color: .yellow)
+            } else if state.showWarning(s) || s == .codex {
                 BannerView(text: "\(s.displayName): \(reason) (\(asOf.formatted(date: .omitted, time: .shortened)))", color: .yellow)
             }
         case .fetchError(let msg):

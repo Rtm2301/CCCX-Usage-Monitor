@@ -39,7 +39,14 @@ struct ClaudeLimitsClient {
         req.setValue("Bearer \(creds.accessToken)", forHTTPHeaderField: "Authorization")
         req.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
 
-        let (data, resp) = try await URLSession.shared.data(for: req)
+        // Ephemeral session per fetch: a long-lived shared session once got
+        // stuck receiving 429s for hours while fresh connections were fine.
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 10
+        let session = URLSession(configuration: config)
+        defer { session.finishTasksAndInvalidate() }
+
+        let (data, resp) = try await session.data(for: req)
         let http = resp as? HTTPURLResponse
         let status = http?.statusCode ?? 0
         if ProcessInfo.processInfo.environment["USAGEBAR_FAKE_401"] == "1" {
@@ -47,11 +54,16 @@ struct ClaudeLimitsClient {
         }
         switch status {
         case 200: break
-        case 401, 403: throw ClaudeLimitsError.tokenExpired
+        case 401, 403:
+            Paths.diag("claude HTTP \(status)")
+            throw ClaudeLimitsError.tokenExpired
         case 429:
             let retryAfter = http?.value(forHTTPHeaderField: "Retry-After").flatMap(Double.init)
+            Paths.diag("claude HTTP 429 retry-after=\(retryAfter.map { String($0) } ?? "none")")
             throw ClaudeLimitsError.rateLimited(retryAfter: retryAfter)
-        default: throw ClaudeLimitsError.httpError(status)
+        default:
+            Paths.diag("claude HTTP \(status)")
+            throw ClaudeLimitsError.httpError(status)
         }
 
         guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {

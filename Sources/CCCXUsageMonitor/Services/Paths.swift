@@ -33,6 +33,24 @@ enum Paths {
         return base
     }()
 
+    /// Tiny rolling diagnostic log (wiped when it exceeds ~256 KB).
+    static func diag(_ message: String) {
+        let url = dataDir.appendingPathComponent("diag.log")
+        let stamp = ISO8601DateFormatter().string(from: Date())
+        let line = Data("\(stamp) \(message)\n".utf8)
+        if let handle = try? FileHandle(forWritingTo: url) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: line)
+            try? handle.close()
+        } else {
+            try? line.write(to: url)
+        }
+        if let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int,
+           size > 262_144 {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     static var snapshotsDir: URL {
         let d = dataDir.appendingPathComponent("snapshots")
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
