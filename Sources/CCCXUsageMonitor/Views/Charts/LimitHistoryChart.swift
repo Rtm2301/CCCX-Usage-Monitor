@@ -129,8 +129,31 @@ struct LimitHistoryChart: View {
                 resetsFooter
                 footnote
             }
+
+            officialLinks
         }
         .padding()
+    }
+
+    /// Quick links to each service's official usage page.
+    private var officialLinks: some View {
+        HStack(spacing: 14) {
+            Text("公式ページ:")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            ForEach(ServiceID.allCases.filter { state.isEnabled($0) }) { s in
+                Link(destination: s.officialUsageURL) {
+                    HStack(spacing: 3) {
+                        ServiceDot(service: s.rawValue)
+                        Text(s.displayName)
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 8))
+                    }
+                    .font(.caption2)
+                }
+            }
+            Spacer()
+        }
     }
 
     /// Upcoming reset times for the selected service's current windows,

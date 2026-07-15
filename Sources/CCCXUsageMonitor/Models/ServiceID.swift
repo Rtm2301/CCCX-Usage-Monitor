@@ -62,6 +62,16 @@ enum ServiceID: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Official usage page (opened from the dashboard footer).
+    var officialUsageURL: URL {
+        switch self {
+        case .claude: return URL(string: "https://claude.ai/new#settings/usage")!
+        case .codex: return URL(string: "https://chatgpt.com/codex/cloud/settings/analytics")!
+        case .cursor: return URL(string: "https://cursor.com/dashboard")!
+        case .copilot: return URL(string: "https://github.com/settings/copilot")!
+        }
+    }
+
     /// The main (non-5h) series key for this service.
     var primarySeriesKey: String {
         switch self {
