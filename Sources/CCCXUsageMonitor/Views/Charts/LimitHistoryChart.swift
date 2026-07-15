@@ -94,15 +94,15 @@ struct LimitHistoryChart: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            Text("制限消費率の推移")
+                .font(.headline)
             HStack {
-                Text("制限消費率の推移")
-                    .font(.headline)
                 Picker("サービス", selection: $service) {
                     ForEach(ServiceID.allCases) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(width: 170)
+                .frame(width: 300)
                 Spacer()
                 Button {
                     exportCSV()

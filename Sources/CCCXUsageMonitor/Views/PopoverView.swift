@@ -33,9 +33,8 @@ struct PopoverView: View {
                         Text(s.displayName)
                             .font(.caption2)
                     }
-                    .toggleStyle(.button)
-                    .buttonStyle(.bordered)
-                    .controlSize(.mini)
+                    .toggleStyle(.checkbox)
+                    .controlSize(.small)
                 }
             }
 

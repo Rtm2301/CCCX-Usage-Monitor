@@ -24,10 +24,16 @@ struct ActivityGridView: View {
         var stats: [String: DayStat] = [:]
         var prevPct: Double = 0
         var prevWindow: Date?
+        var isFirst = true
         for s in samples {
             let sameWindow = prevWindow != nil && s.resetsAt != nil
                 && abs(prevWindow!.timeIntervalSince(s.resetsAt!)) < 120
-            let delta = sameWindow ? max(0, s.usedPercent - prevPct) : s.usedPercent
+            // The very first sample carries usage accumulated BEFORE recording
+            // started — booking it onto that day would inflate the heatmap.
+            let delta: Double = isFirst ? 0
+                : sameWindow ? max(0, s.usedPercent - prevPct)
+                : s.usedPercent
+            isFirst = false
             let key = dayF.string(from: s.ts)
             var d = stats[key] ?? DayStat()
             d.points += delta
