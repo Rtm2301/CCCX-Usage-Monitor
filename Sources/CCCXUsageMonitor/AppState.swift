@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import AppKit
+import Network
 
 @Observable
 @MainActor
@@ -38,6 +39,8 @@ final class AppState {
     private let snapshotStore = SnapshotStore()
 
     private var pollTask: Task<Void, Never>?
+    private let pathMonitor = NWPathMonitor()
+    private var wasOffline = false
     private var claudeBackoffUntil: Date = .distantPast
     private var claudeBackoffSeconds: Double = 60
     private var lastAppended: [String: LimitSnapshot] = [:]
@@ -131,6 +134,42 @@ final class AppState {
                 try? await Task.sleep(for: .seconds(interval))
             }
         }
+
+        // Refresh immediately when connectivity returns or the Mac wakes —
+        // otherwise the offline error backoff (up to 5 min) plus the poll
+        // interval delays recovery long after the network is back.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                if path.status == .satisfied {
+                    if self.wasOffline {
+                        self.wasOffline = false
+                        self.refreshNow()
+                    }
+                } else {
+                    self.wasOffline = true
+                }
+            }
+        }
+        pathMonitor.start(queue: .global(qos: .utility))
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refreshNow()
+            }
+        }
+    }
+
+    /// Clear the error backoff and fetch right away. A server-mandated 429
+    /// wait (claudeRetryAt != nil) is left untouched.
+    private func refreshNow() {
+        if claudeRetryAt == nil {
+            claudeBackoffSeconds = Self.limitsInterval
+            claudeBackoffUntil = .distantPast
+        }
+        Task { await self.refreshLimits() }
     }
 
     /// One-time copy of settings from the old bundle id after the rename.
