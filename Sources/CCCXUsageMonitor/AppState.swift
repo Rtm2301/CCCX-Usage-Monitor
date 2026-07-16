@@ -230,7 +230,23 @@ final class AppState {
         } catch {
             backoffClaude(retryAfter: nil)
             claudeRetryAt = nil
-            statuses[.claude] = .fetchError(error.localizedDescription)
+            statuses[.claude] = .fetchError(Self.friendlyMessage(error))
+        }
+    }
+
+    /// Raw URLError text is English and cryptic ("A server with the specified
+    /// hostname could not be found.") — map the common offline cases to short
+    /// Japanese; anything else keeps its original description.
+    static func friendlyMessage(_ error: Error) -> String {
+        guard let e = error as? URLError else { return error.localizedDescription }
+        switch e.code {
+        case .notConnectedToInternet, .networkConnectionLost, .cannotFindHost,
+             .cannotConnectToHost, .dnsLookupFailed:
+            return "オフライン — 接続が戻り次第再取得します。"
+        case .timedOut:
+            return "接続タイムアウト — 自動で再試行します。"
+        default:
+            return e.localizedDescription
         }
     }
 
@@ -264,7 +280,7 @@ final class AppState {
                 configuredMap[.codex] = false
                 statuses[.codex] = .unknown
             } else {
-                statuses[.codex] = .fetchError(error.localizedDescription)
+                statuses[.codex] = .fetchError(Self.friendlyMessage(error))
             }
         }
     }
@@ -284,7 +300,7 @@ final class AppState {
             configuredMap[.cursor] = false
             statuses[.cursor] = .unknown
         } catch {
-            statuses[.cursor] = .fetchError(error.localizedDescription)
+            statuses[.cursor] = .fetchError(Self.friendlyMessage(error))
         }
     }
 
@@ -303,7 +319,7 @@ final class AppState {
         } catch CopilotError.notLoggedIn {
             statuses[.copilot] = .authError("Copilot のログインが無効です — 再ログインしてください")
         } catch {
-            statuses[.copilot] = .fetchError(error.localizedDescription)
+            statuses[.copilot] = .fetchError(Self.friendlyMessage(error))
         }
     }
 
