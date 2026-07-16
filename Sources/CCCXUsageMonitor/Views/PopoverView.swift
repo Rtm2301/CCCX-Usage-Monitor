@@ -126,7 +126,7 @@ struct PopoverView: View {
             .buttonStyle(.borderless)
         }
         .padding(14)
-        .frame(width: 320)
+        .frame(width: 380)
     }
 
     @ViewBuilder
@@ -218,6 +218,7 @@ struct BannerView: View {
     var body: some View {
         Label(text, systemImage: "exclamationmark.triangle.fill")
             .font(.caption)
+            .fixedSize(horizontal: false, vertical: true)   // wrap, never truncate
             .padding(6)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(color.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
@@ -245,8 +246,21 @@ struct LimitGaugeRow: View {
                     .font(.callout.monospacedDigit())
                     .fontWeight(.semibold)
             }
-            ProgressView(value: min(limit.effectivePercent, 100), total: 100)
-                .tint(barColor)
+            // Hand-drawn bar (same as the HUD): ProgressView's .tint is
+            // ignored in some window contexts and falls back to the system
+            // accent color.
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.gray.opacity(0.3))
+                    if limit.effectivePercent > 0 {
+                        Capsule()
+                            .fill(barColor)
+                            .frame(width: max(6, geo.size.width * CGFloat(min(limit.effectivePercent, 100)) / 100))
+                    }
+                }
+            }
+            .frame(height: 6)
             if limit.isExpired {
                 Text("リセット済み — 次の取得で更新されます。")
                     .font(.caption2)
