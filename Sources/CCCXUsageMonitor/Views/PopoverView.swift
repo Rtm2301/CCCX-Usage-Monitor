@@ -121,6 +121,13 @@ struct PopoverView: View {
                     Label("ダッシュボードを開く", systemImage: "chart.xyaxis.line")
                 }
                 Spacer()
+                Button {
+                    state.manualRefresh()
+                } label: {
+                    Label("再読み込み", systemImage: "arrow.clockwise")
+                }
+                .help("待機を無視して今すぐ再取得します。")
+                Spacer()
                 Button("終了") { NSApplication.shared.terminate(nil) }
             }
             .buttonStyle(.borderless)

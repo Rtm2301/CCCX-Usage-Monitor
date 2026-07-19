@@ -172,6 +172,14 @@ final class AppState {
         Task { await self.refreshLimits() }
     }
 
+    /// User-initiated reload: skips every backoff including a 429 wait —
+    /// it's one explicit request, and the banner shows the outcome either way.
+    func manualRefresh() {
+        claudeBackoffSeconds = Self.limitsInterval
+        claudeBackoffUntil = .distantPast
+        Task { await self.refreshLimits() }
+    }
+
     /// One-time copy of settings from the old bundle id after the rename.
     private func migrateLegacyDefaults() {
         let defaults = UserDefaults.standard
@@ -216,6 +224,9 @@ final class AppState {
         } catch let e as ClaudeLimitsError {
             switch e {
             case .tokenExpired:
+                // Back off here too: retrying an expired token every minute
+                // is what tripped the IP rate limit (401 storm → 429).
+                backoffClaude(retryAfter: nil)
                 claudeRetryAt = nil
                 statuses[.claude] = .authError(e.localizedDescription)
             case .rateLimited(let retryAfter):

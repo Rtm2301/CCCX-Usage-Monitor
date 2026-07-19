@@ -131,6 +131,13 @@ struct FloatingHUDView: View {
                 .help("ダッシュボードを開く")
 
                 Button {
+                    state.manualRefresh()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .help("今すぐ再取得")
+
+                Button {
                     menuBarVisible.toggle()
                 } label: {
                     Image(systemName: menuBarVisible ? "menubar.rectangle" : "menubar.dock.rectangle.badge.record")
