@@ -38,54 +38,78 @@ struct LimitHistoryChart: View {
         }
     }
 
-    private var filtered: [LimitSnapshot] {
-        let since = Date().addingTimeInterval(-range.seconds)
-        return state.limitHistory.filter { $0.ts >= since }
+    /// Chart data is cached here: hover (chartXSelection) re-evaluates the
+    /// body on every mouse move, and recomputing this — a scan + grouping
+    /// over the whole 90-day history — per move froze the UI.
+    private struct Derived {
+        var sessionWindows: [SessionWindow] = []
+        var overlaySeries: [(key: String, name: String, samples: [LimitSnapshot])] = []
+        var hasData = false
     }
+    @State private var derived = Derived()
 
-    private var serviceSamples: [LimitSnapshot] {
-        filtered.filter { $0.service == service.rawValue }
-    }
-
-    /// 5-hour windows of the selected service (windowMinutes == 300),
-    /// keyed by resets_at rounded to the minute (the API jitters it by ~1 s).
-    /// Codex has no 5h window today, but this picks it up if the plan changes.
-    private var sessionWindows: [SessionWindow] {
-        var byWindow: [String: SessionWindow] = [:]
-        for s in serviceSamples where s.windowMinutes == 300 {
-            guard let resets = s.resetsAt else { continue }
-            let rounded = Date(timeIntervalSince1970: (resets.timeIntervalSince1970 / 60).rounded() * 60)
-            let key = "\(rounded.timeIntervalSince1970)"
-            if byWindow[key] == nil {
-                byWindow[key] = SessionWindow(
-                    id: key,
-                    start: rounded.addingTimeInterval(-5 * 3600),
-                    end: rounded,
-                    samples: [])
-            }
-            byWindow[key]?.samples.append(s)
+    /// Bucket-max downsampling to ≤ ~1500 points per series so long ranges
+    /// stay cheap to re-render while hovering. Keeping the bucket maximum
+    /// preserves the peaks the chart exists to show.
+    private static func downsample(_ samples: [LimitSnapshot], rangeSeconds: TimeInterval) -> [LimitSnapshot] {
+        let bucket = rangeSeconds / 1500
+        guard bucket > 60 else { return samples }
+        var best: [String: LimitSnapshot] = [:]
+        for s in samples {
+            let key = "\(s.seriesKey)|\(Int(s.ts.timeIntervalSince1970 / bucket))"
+            if let cur = best[key], cur.usedPercent >= s.usedPercent { continue }
+            best[key] = s
         }
-        return byWindow.values
+        return Array(best.values)
+    }
+
+    /// 5-hour windows (windowMinutes == 300) keyed by resets_at rounded to
+    /// the minute (the API jitters it by ~1 s); the rest become overlay
+    /// lines. Codex has no 5h window today, but this picks it up if the
+    /// plan changes.
+    private func recompute() {
+        let since = Date().addingTimeInterval(-range.seconds)
+        let samples = Self.downsample(
+            state.limitHistory.filter { $0.ts >= since && $0.service == service.rawValue },
+            rangeSeconds: range.seconds)
+
+        var byWindow: [String: SessionWindow] = [:]
+        var overlay: [String: [LimitSnapshot]] = [:]
+        for s in samples {
+            if s.windowMinutes == 300 {
+                guard let resets = s.resetsAt else { continue }
+                let rounded = Date(timeIntervalSince1970: (resets.timeIntervalSince1970 / 60).rounded() * 60)
+                let key = "\(rounded.timeIntervalSince1970)"
+                if byWindow[key] == nil {
+                    byWindow[key] = SessionWindow(
+                        id: key,
+                        start: rounded.addingTimeInterval(-5 * 3600),
+                        end: rounded,
+                        samples: [])
+                }
+                byWindow[key]?.samples.append(s)
+            } else {
+                overlay[s.seriesKey, default: []].append(s)
+            }
+        }
+        let windows = byWindow.values
             .map { w in
                 var w = w
                 w.samples.sort { $0.ts < $1.ts }
                 return w
             }
             .sorted { $0.start < $1.start }
-    }
-
-    /// Non-5h series of the selected service, drawn as overlay lines.
-    private var overlaySamples: [LimitSnapshot] {
-        serviceSamples.filter { $0.windowMinutes != 300 }
-    }
-
-    private var overlayKeys: [String] {
-        Array(Set(overlaySamples.map(\.seriesKey))).sorted()
+        let overlaySeries = overlay.keys.sorted().map { key -> (String, String, [LimitSnapshot]) in
+            let sorted = overlay[key]!.sorted { $0.ts < $1.ts }
+            return (key, sorted[0].displayName, sorted)
+        }
+        derived = Derived(sessionWindows: windows, overlaySeries: overlaySeries,
+                          hasData: !samples.isEmpty)
     }
 
     private var selectedWindow: SessionWindow? {
         guard let selectedDate else { return nil }
-        return sessionWindows.first { $0.start <= selectedDate && selectedDate <= $0.end }
+        return derived.sessionWindows.first { $0.start <= selectedDate && selectedDate <= $0.end }
     }
 
     /// Session-block color per service identity: Claude = blue blocks,
@@ -109,7 +133,7 @@ struct LimitHistoryChart: View {
                 } label: {
                     Label("CSV", systemImage: "square.and.arrow.up")
                 }
-                .disabled(filtered.isEmpty)
+                .disabled(!derived.hasData)
                 Picker("期間", selection: $range) {
                     ForEach(HistoryRange.allCases) { Text($0.rawValue).tag($0) }
                 }
@@ -118,7 +142,7 @@ struct LimitHistoryChart: View {
                 .frame(width: 280)
             }
 
-            if serviceSamples.isEmpty {
+            if !derived.hasData {
                 ContentUnavailableView(
                     "まだ履歴がありません",
                     systemImage: "clock",
@@ -133,8 +157,11 @@ struct LimitHistoryChart: View {
             officialLink
         }
         .padding()
-        .onAppear { ensureValidSelection() }
+        .onAppear { ensureValidSelection(); recompute() }
         .onChange(of: state.enabledSet) { _, _ in ensureValidSelection() }
+        .onChange(of: range) { _, _ in recompute() }
+        .onChange(of: service) { _, _ in recompute() }
+        .onChange(of: state.limitHistory.count) { _, _ in recompute() }
     }
 
     private var enabledServices: [ServiceID] {
@@ -198,7 +225,7 @@ struct LimitHistoryChart: View {
 
     private var footnoteText: String {
         let common = "サーバー側の値(複数マシン合算)、履歴はアプリ稼働中のみ蓄積。"
-        if !sessionWindows.isEmpty {
+        if !derived.sessionWindows.isEmpty {
             return "点線の箱 = 5時間セッション枠、折れ線 = 週次などの他ウィンドウ。" + common
         }
         switch service {
@@ -231,7 +258,7 @@ struct LimitHistoryChart: View {
                         .font(.callout)
                         .foregroundStyle(.red)
                 }
-            } else if !sessionWindows.isEmpty {
+            } else if !derived.sessionWindows.isEmpty {
                 Text("5時間枠のブロックにカーソルを合わせると詳細が表示されます。")
                     .font(.callout)
                     .foregroundStyle(.tertiary)
@@ -244,7 +271,7 @@ struct LimitHistoryChart: View {
     private var combinedChart: some View {
         Chart {
             // 5h session windows: dashed box + filled step area.
-            ForEach(sessionWindows) { w in
+            ForEach(derived.sessionWindows) { w in
                 RuleMark(x: .value("枠開始", w.start))
                     .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
                     .foregroundStyle(blockColor.opacity(selectedWindow?.id == w.id ? 0.7 : 0.35))
@@ -269,13 +296,12 @@ struct LimitHistoryChart: View {
             }
 
             // Other windows (weekly etc.) as overlay lines, colored per series.
-            ForEach(overlayKeys, id: \.self) { key in
-                let samples = overlaySamples.filter { $0.seriesKey == key }
-                ForEach(samples, id: \.self) { s in
+            ForEach(derived.overlaySeries, id: \.key) { series in
+                ForEach(series.samples, id: \.self) { s in
                     LineMark(
                         x: .value("時刻", s.ts),
                         y: .value("使用率 %", s.usedPercent),
-                        series: .value("枠", key))
+                        series: .value("枠", series.key))
                     .interpolationMethod(.stepEnd)
                     .foregroundStyle(by: .value("系列", s.displayName))
                     .lineStyle(StrokeStyle(lineWidth: 2))
@@ -287,11 +313,8 @@ struct LimitHistoryChart: View {
                 .foregroundStyle(.red.opacity(0.6))
         }
         .chartForegroundStyleScale(
-            domain: overlayKeys.map { key in
-                LimitSnapshot(ts: .now, seriesKey: key, usedPercent: 0,
-                              resetsAt: nil, windowMinutes: nil, severity: nil).displayName
-            },
-            range: overlayKeys.map { ChartPalette.limitSeriesColor($0) })
+            domain: derived.overlaySeries.map(\.name),
+            range: derived.overlaySeries.map { ChartPalette.limitSeriesColor($0.key) })
         .chartYScale(domain: 0...105)
         .chartYAxis {
             AxisMarks(values: [0, 25, 50, 75, 100]) { v in
@@ -319,7 +342,8 @@ struct LimitHistoryChart: View {
 
         let iso = ISO8601DateFormatter()
         var csv = "timestamp,series,used_percent,resets_at,window_minutes\n"
-        for s in filtered {
+        let since = Date().addingTimeInterval(-range.seconds)
+        for s in state.limitHistory where s.ts >= since {   // full resolution, all services
             let resets = s.resetsAt.map { iso.string(from: $0) } ?? ""
             csv += "\(iso.string(from: s.ts)),\(s.seriesKey),\(s.usedPercent),\(resets),\(s.windowMinutes.map(String.init) ?? "")\n"
         }
