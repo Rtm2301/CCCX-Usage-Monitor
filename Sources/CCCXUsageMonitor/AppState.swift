@@ -112,6 +112,15 @@ final class AppState {
             lastAppended[s.seriesKey] = s
         }
 
+        // Windows already over the threshold were notified before the
+        // restart — don't notify them again.
+        let notifyThreshold = UserDefaults.standard.double(forKey: "notifyThreshold")
+        if notifyThreshold > 0 {
+            for s in latestLimits.values where s.usedPercent >= notifyThreshold {
+                notifiedWindows.insert(Self.windowKey(s))
+            }
+        }
+
         // Lockout guard: never start with both the menu bar item and the HUD hidden.
         let defaults = UserDefaults.standard
         if defaults.object(forKey: "menuBarVisible") != nil,
@@ -377,10 +386,18 @@ final class AppState {
     /// One notification per window when it crosses the configured threshold
     /// (0 = off). The window key includes resets_at, so each new window can
     /// notify again.
+    /// One key per window: resets_at jitters by ~1 s between fetches, so the
+    /// raw value made every poll look like a new window (and re-notified
+    /// every minute). Round to the minute, like the chart grouping does.
+    private static func windowKey(_ s: LimitSnapshot) -> String {
+        let rounded = s.resetsAt.map { ($0.timeIntervalSince1970 / 60).rounded() * 60 } ?? 0
+        return "\(s.seriesKey)|\(rounded)"
+    }
+
     private func checkNotifyThreshold(_ s: LimitSnapshot) {
         let threshold = UserDefaults.standard.double(forKey: "notifyThreshold")
         guard threshold > 0, s.usedPercent >= threshold, !s.isExpired else { return }
-        let windowKey = "\(s.seriesKey)|\(s.resetsAt?.timeIntervalSince1970 ?? 0)"
+        let windowKey = Self.windowKey(s)
         guard !notifiedWindows.contains(windowKey) else { return }
         notifiedWindows.insert(windowKey)
         var body = "現在 \(Int(s.usedPercent))%"
